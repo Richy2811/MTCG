@@ -3,7 +3,8 @@
 namespace projectMTCG_loeffler {
     class Program {
         static void Main(string[] args) {
-            Console.WriteLine("Hello World!");
+            HttpRequestHandler handler = new HttpRequestHandler(2811);
+            handler.Run();
         }
     }
 }
