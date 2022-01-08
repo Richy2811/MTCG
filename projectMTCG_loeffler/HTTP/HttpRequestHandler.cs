@@ -26,6 +26,7 @@ namespace projectMTCG_loeffler {
             while(true) {
                 //accept incoming requests in loop
                 TcpClient socket = _listener.AcceptTcpClient();
+                socket.ReceiveTimeout = 50;
 
                 Console.WriteLine("Incoming request accepted");
 
