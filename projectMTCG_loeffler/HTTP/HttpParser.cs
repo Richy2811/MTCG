@@ -1,12 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Text;
-using System.Threading.Tasks;
-using Newtonsoft.Json;
 using projectMTCG_loeffler.Database;
 
 namespace projectMTCG_loeffler {
@@ -17,12 +13,6 @@ namespace projectMTCG_loeffler {
         private HttpRequestHandler _handler;
         private DbHandler _dbHandler;
         private bool _mvpset;
-
-        private class User {
-            public string username;
-            public string password;
-        }
-        private User userinfo;                                              //body of request gets saved as an instance of User in case of login or registration
 
 
         public string Method { get; private set; }                          //request method (GET, POST, PUT, DELETE, ...)
@@ -81,22 +71,7 @@ namespace projectMTCG_loeffler {
                 case "POST":
                     switch (Path) {
                         case "/users":      //registration request
-                            //check if header contains json content
-                            if (Headerparts.ContainsKey("Content-Type")) {
-                                if (Headerparts["Content-Type"] == "application/json") {
-                                    //save user info into class
-                                    userinfo = JsonConvert.DeserializeObject<User>(RequestContent);
-                                }
-                                else {
-                                    Console.Error.WriteLine("Unexpected content type in header");
-                                    break;
-                                }
-                            }
-                            else {
-                                Console.Error.WriteLine("Missing content in POST request");
-                                break;
-                            }
-                            status = _dbHandler.RegisterUser(userinfo.username, userinfo.password);
+                            status = _dbHandler.RegisterUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.Created:
                                     content = "<html><body><h1>Registration successful</h1>You can now proceed to login</form></html>";
@@ -113,20 +88,7 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case "/sessions":   //login request
-                            //check if header contains json content
-                            if (Headerparts.ContainsKey("Content-Type")) {
-                                if (Headerparts["Content-Type"] == "application/json") {
-                                    //save user info into class
-                                    userinfo = JsonConvert.DeserializeObject<User>(RequestContent);
-                                }
-                                else {
-                                    break;
-                                }
-                            }
-                            else {
-                                break;
-                            }
-                            status = _dbHandler.LoginUser(userinfo.username, userinfo.password);
+                            status = _dbHandler.LoginUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
                                     content = "<html><body><h1>Login successful</h1>View all your profile information here</form></html>";
@@ -139,6 +101,13 @@ namespace projectMTCG_loeffler {
                                 case HttpStatusCode.InternalServerError:
                                     content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</form></html>";
                                     break;
+                            }
+                            break;
+
+                        case "/packages":   //admin can add and regular user can acquire packages
+                            status = _dbHandler.AddPackages(RequestContent, Headerparts);
+                            switch (status) {
+                                
                             }
                             break;
                     }
@@ -217,7 +186,7 @@ namespace projectMTCG_loeffler {
                 }
             }
             catch (Exception e) {
-                Console.Error.WriteLine(e.Message);
+                Console.Error.WriteLine($"Error {e.Message}");
             }
 
             //print seperated HTTP request in console for easier debugging

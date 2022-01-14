@@ -1,30 +1,56 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
-using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Npgsql;
 using NpgsqlTypes;
 
 namespace projectMTCG_loeffler.Database {
-    class DbHandler {
+    public class DbHandler {
         private const string _connString = "Server=127.0.0.1; Port=5432; User Id=richy; Password=1234; Database=mtcgdb";
         private string _resultString;   //used to save a query result into a string
 
-        public HttpStatusCode RegisterUser(string username, string password) {
+        public class User {
+            public string username;
+            public string password;
+        }
+        private User userinfo;                                              //body of request gets saved as an instance of User in case of login or registration
+
+        public HttpStatusCode RegisterUser(string userJsonString, Dictionary<string, string> headerParts) {
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //save user info into class
+                    userinfo = JsonConvert.DeserializeObject<User>(userJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.InternalServerError;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in POST request /users");
+                return HttpStatusCode.Unauthorized;
+            }
+
             SHA256 mySha256 = SHA256.Create();
-            byte[] hashstr = Encoding.UTF8.GetBytes(password);
+            byte[] hashstr = Encoding.UTF8.GetBytes(userinfo.password);
             byte[] hashedPassword = mySha256.ComputeHash(hashstr);
 
             NpgsqlConnection conn = new NpgsqlConnection(_connString);
-            conn.Open();
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
 
-            string insertUser = "INSERT INTO users (username, password) VALUES (@uname, @passw)";
+            string insertUser = "INSERT INTO users (username, password, coins) VALUES (@uname, @passw, 20)";
             NpgsqlCommand command = new NpgsqlCommand(insertUser, conn);
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo.username);
             command.Parameters.AddWithValue("passw", NpgsqlDbType.Varchar, 40, Encoding.UTF8.GetString(hashedPassword));
             command.Prepare();
 
@@ -52,17 +78,37 @@ namespace projectMTCG_loeffler.Database {
             }
         }
 
-        public HttpStatusCode LoginUser(string username, string password) {
-
+        public HttpStatusCode LoginUser(string userJsonString, Dictionary<string, string> headerParts) {
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //save user info into class
+                    userinfo = JsonConvert.DeserializeObject<User>(userJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.Unauthorized;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in POST request /users");
+                return HttpStatusCode.Unauthorized;
+            }
             SHA256 mySha256 = SHA256.Create();
 
             string selectPassword = "SELECT password FROM users WHERE username = @uname";
             NpgsqlConnection conn = new NpgsqlConnection(_connString);
-            conn.Open();
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
 
             NpgsqlCommand command = new NpgsqlCommand(selectPassword, conn);
 
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo.username);
 
             command.Prepare();
 
@@ -87,7 +133,7 @@ namespace projectMTCG_loeffler.Database {
 
                 case 1:
                     //matching username found in db
-                    byte[] hashstr = Encoding.UTF8.GetBytes(password);
+                    byte[] hashstr = Encoding.UTF8.GetBytes(userinfo.password);
                     byte[] hashValue = mySha256.ComputeHash(hashstr);
                     string hashValueStr = Encoding.UTF8.GetString(hashValue);
 
@@ -106,6 +152,25 @@ namespace projectMTCG_loeffler.Database {
                     conn.Close();
                     return HttpStatusCode.InternalServerError;
             }
+        }
+
+        public HttpStatusCode AddPackages(string userJsonString, Dictionary<string, string> headerParts) {
+            //check the authentication token
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //save user info into class
+                    userinfo = JsonConvert.DeserializeObject<User>(userJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.Unauthorized;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in POST request /packages");
+                return HttpStatusCode.Unauthorized;
+            }
+            return HttpStatusCode.InternalServerError;
         }
     }
 }

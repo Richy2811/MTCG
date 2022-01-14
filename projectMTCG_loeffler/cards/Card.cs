@@ -12,8 +12,9 @@ namespace projectMTCG_loeffler.cards {
     }
 
     abstract class Card : ICard {
-        public ushort attackPoints;
-        public Element element;
+        public ushort AttackPoints;
+        public bool Defeated;
+        public Element Element;
 
         public abstract void Attack();
     }
