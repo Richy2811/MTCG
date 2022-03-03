@@ -5,6 +5,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace projectMTCG_loeffler.cards {
-    class Wizzard {
+    public class Wizzard : Monster {
+        public Wizzard(string id, string name, ushort attack, Element element) {
+            Id = id;
+            Name = name;
+            AttackPoints = attack;
+            Element = element;
+        }
     }
 }

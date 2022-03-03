@@ -5,9 +5,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace projectMTCG_loeffler.cards {
-    class Spell : ICard {
-        public void Attack() {
-            //method implementation
+    public class Spell : Card {
+        public Spell(string id, string name, ushort attack, Element element) {
+            Id = id;
+            Name = name;
+            AttackPoints = attack;
+            Element = element;
         }
     }
 }

@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -17,6 +19,20 @@ namespace projectMTCG_loeffler.Database {
             public string password;
         }
         private User userinfo;                                              //body of request gets saved as an instance of User in case of login or registration
+
+
+        public HttpStatusCode ShowStats(string userJsonString, Dictionary<string, string> headerParts) {
+            if (!headerParts.ContainsKey("Authorization")) {
+                return HttpStatusCode.Unauthorized;
+            }
+
+            string[] authorization = headerParts["Authorization"].Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":");
+            //todo
+            return HttpStatusCode.OK;
+        }
 
         public HttpStatusCode RegisterUser(string userJsonString, Dictionary<string, string> headerParts) {
             //check if header contains json content
@@ -48,7 +64,7 @@ namespace projectMTCG_loeffler.Database {
                 return HttpStatusCode.InternalServerError;
             }
 
-            string insertUser = "INSERT INTO users (username, password, coins) VALUES (@uname, @passw, 20)";
+            string insertUser = "INSERT INTO users (username, password, coins, elo) VALUES (@uname, @passw, 20, 100)";
             NpgsqlCommand command = new NpgsqlCommand(insertUser, conn);
             command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo.username);
             command.Parameters.AddWithValue("passw", NpgsqlDbType.Varchar, 40, Encoding.UTF8.GetString(hashedPassword));
@@ -78,7 +94,8 @@ namespace projectMTCG_loeffler.Database {
             }
         }
 
-        public HttpStatusCode LoginUser(string userJsonString, Dictionary<string, string> headerParts) {
+
+        public HttpStatusCode AuthenticateUser(string userJsonString, Dictionary<string, string> headerParts) {
             //check if header contains json content
             if (headerParts.ContainsKey("Content-Type")) {
                 if (headerParts["Content-Type"] == "application/json") {
@@ -154,23 +171,143 @@ namespace projectMTCG_loeffler.Database {
             }
         }
 
-        public HttpStatusCode AddPackages(string userJsonString, Dictionary<string, string> headerParts) {
-            //check the authentication token
+
+        public HttpStatusCode DeleteUser(string userJsonString, Dictionary<string, string> headerParts) {
+            //check for admin token
+            if (headerParts.ContainsKey("Authorization")) {
+                if (headerParts["Authorization"] == "Basic admin-mtcgToken") {}
+                else {
+                    return HttpStatusCode.Forbidden;
+                }
+            }
+            else {
+                return HttpStatusCode.Unauthorized;
+            }
+
+            JObject jsonObject;
+
+            //check if header contains json content
             if (headerParts.ContainsKey("Content-Type")) {
                 if (headerParts["Content-Type"] == "application/json") {
-                    //save user info into class
-                    userinfo = JsonConvert.DeserializeObject<User>(userJsonString);
+                    //parse jsonstring
+                    jsonObject = JObject.Parse(userJsonString);
+                    //return error if json string does not contain username
+                    if (!jsonObject.ContainsKey("Username")) {
+                        return HttpStatusCode.UnprocessableEntity;
+                    }
                 }
                 else {
                     Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
-                    return HttpStatusCode.Unauthorized;
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in DELETE request /users");
+                return HttpStatusCode.UnprocessableEntity;
+            }
+
+            string deleteUser = "DELETE FROM users WHERE username = @uname";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+
+            NpgsqlCommand command = new NpgsqlCommand(deleteUser, conn);
+
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, jsonObject["Username"].ToString());
+
+            command.Prepare();
+
+            try {
+                if (command.ExecuteNonQuery() == 1) {
+                    Console.WriteLine("User successfully deleted from database");
+                    conn.Close();
+                    return HttpStatusCode.OK;
+                }
+                else {
+                    Console.WriteLine("Deletion failed");
+                    conn.Close();
+                    return HttpStatusCode.NotFound;
+                }
+            }
+            catch (NpgsqlException e) {
+                Console.Error.WriteLine($"Error {e.Message}");
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+        }
+
+
+        public HttpStatusCode AddPackage(string packageJsonString, Dictionary<string, string> headerParts) {
+            //check for admin token
+            if (headerParts.ContainsKey("Authorization")) {
+                if (headerParts["Authorization"] == "Basic admin-mtcgToken") { }
+                else {
+                    return HttpStatusCode.Forbidden;
+                }
+            }
+            else {
+                return HttpStatusCode.Unauthorized;
+            }
+
+            JArray jsonArray;
+
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //parse jsonstring
+                    jsonArray = JArray.Parse(packageJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.UnprocessableEntity;
                 }
             }
             else {
                 Console.Error.WriteLine("Missing content in POST request /packages");
-                return HttpStatusCode.Unauthorized;
+                return HttpStatusCode.UnprocessableEntity;
             }
-            return HttpStatusCode.InternalServerError;
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+
+            string insertUser = "INSERT INTO market (cardpackage, price) VALUES (@package, 5)";
+            NpgsqlCommand command = new NpgsqlCommand(insertUser, conn);
+            command.Parameters.AddWithValue("package", NpgsqlDbType.Jsonb, jsonArray.ToString());
+            command.Prepare();
+
+            try {
+                if (command.ExecuteNonQuery() == 1) {
+                    Console.WriteLine("Card package successfully added");
+                    conn.Close();
+                    return HttpStatusCode.Created;
+                }
+                else {
+                    Console.WriteLine("Failed to add card package");
+                    conn.Close();
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            catch (NpgsqlException e) {
+                Console.Error.WriteLine($"Error {e.Message}");
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
         }
+
+
+        /*public HttpStatusCode AquirePackage(string packageJsonString, Dictionary<string, string> headerParts) {
+            //todo
+        }*/
     }
 }

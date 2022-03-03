@@ -5,6 +5,12 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace projectMTCG_loeffler.cards {
-    class Dragon {
+    public class Dragon : Monster {
+        public Dragon(string id, string name, ushort attack, Element element) {
+            Id = id;
+            Name = name;
+            AttackPoints = attack;
+            Element = element;
+        }
     }
 }

@@ -3,87 +3,109 @@
   <Class Name="projectMTCG_loeffler.cards.Card">
     <Position X="2.5" Y="2" Width="1.5" />
     <TypeIdentifier>
-      <HashCode>AAAAAAAAAAAAAAAAAAAAAQAIAIAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Card.cs</FileName>
+      <HashCode>AAACAAAAAAAAAAAAAAgAAAQAAAAAAAAAAAAAAQAAAAA=</HashCode>
+      <FileName>Cards\Card.cs</FileName>
     </TypeIdentifier>
-    <Lollipop Position="0.2" />
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Dragon" Collapsed="true">
     <Position X="3.75" Y="7.25" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Dragon.cs</FileName>
+      <FileName>Cards\Dragon.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.FireElve" Collapsed="true">
     <Position X="1.25" Y="7.25" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\FireElve.cs</FileName>
+      <FileName>Cards\FireElve.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Goblin" Collapsed="true">
     <Position X="1.25" Y="5.75" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Goblin.cs</FileName>
+      <FileName>Cards\Goblin.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Knight" Collapsed="true">
     <Position X="1.25" Y="6.5" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Knight.cs</FileName>
+      <FileName>Cards\Knight.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Kraken" Collapsed="true">
     <Position X="1.25" Y="8" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Kraken.cs</FileName>
+      <FileName>Cards\Kraken.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Monster" Collapsed="true">
     <Position X="2.5" Y="4.75" Width="1.5" />
     <TypeIdentifier>
-      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Monster.cs</FileName>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Cards\Monster.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Ork" Collapsed="true">
     <Position X="3.75" Y="5.75" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Ork.cs</FileName>
+      <FileName>Cards\Ork.cs</FileName>
     </TypeIdentifier>
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Spell">
     <Position X="5.25" Y="2" Width="1.5" />
     <TypeIdentifier>
-      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Spell.cs</FileName>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
+      <FileName>Cards\Spell.cs</FileName>
     </TypeIdentifier>
-    <Lollipop Position="0.2" />
   </Class>
   <Class Name="projectMTCG_loeffler.cards.Wizzard" Collapsed="true">
     <Position X="3.75" Y="6.5" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Wizzard.cs</FileName>
+      <FileName>Cards\Wizzard.cs</FileName>
     </TypeIdentifier>
   </Class>
-  <Interface Name="projectMTCG_loeffler.cards.ICard">
-    <Position X="3.75" Y="0.5" Width="1.5" />
+  <Class Name="projectMTCG_loeffler.Database.DbHandler">
+    <Position X="11.5" Y="2" Width="1.5" />
+    <Compartments>
+      <Compartment Name="Nested Types" Collapsed="false" />
+    </Compartments>
+    <NestedTypes>
+      <Class Name="projectMTCG_loeffler.Database.DbHandler.User">
+        <TypeIdentifier>
+          <NewMemberFileName>Database\DbHandler.cs</NewMemberFileName>
+        </TypeIdentifier>
+      </Class>
+    </NestedTypes>
     <TypeIdentifier>
-      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\ICard.cs</FileName>
+      <HashCode>EBAACAAAAAAAAACEAAAAAAAAAIAAAAAAAQAAAAAAAAA=</HashCode>
+      <FileName>Database\DbHandler.cs</FileName>
     </TypeIdentifier>
-  </Interface>
+  </Class>
+  <Class Name="projectMTCG_loeffler.HttpParser">
+    <Position X="9.75" Y="2" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>IQAgAAAAEAgAAAIAAAEgAAAAAAAAAAAAAQAAQAFAAAA=</HashCode>
+      <FileName>HTTP\HttpParser.cs</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="projectMTCG_loeffler.HttpRequestHandler">
+    <Position X="8" Y="2" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAACAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>HTTP\HttpRequestHandler.cs</FileName>
+    </TypeIdentifier>
+  </Class>
   <Enum Name="projectMTCG_loeffler.cards.Element">
     <Position X="0.75" Y="2" Width="1.5" />
     <TypeIdentifier>
       <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAsAAAAAAAAAAAAAAA=</HashCode>
-      <FileName>cards\Card.cs</FileName>
+      <FileName>Cards\Card.cs</FileName>
     </TypeIdentifier>
   </Enum>
   <Font Name="Segoe UI" Size="9" />

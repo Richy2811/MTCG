@@ -40,30 +40,18 @@ namespace projectMTCG_loeffler {
         private void Respond(StreamWriter writer) {
             //write a response based on the request
             HttpStatusCode status = HttpStatusCode.NotFound;  //placeholder for actual status response
-            string content = $"<html><body><h1>Error {(int)status}</h1>Page not found</form></html>";
+            string content = $"<html><body><h1>Error {(int)status}</h1>Page not found</body></html>";
             switch (Method) {
                 //depending on the method and returned status (201 for successful registration, 409 for already existing username, etc.) set status and response accordingly
-                //combinations of methods, path, and response codes that are not used result in a "page not found" error
-
-                /*
-                    Possible responses:
-
-                    HttpStatusCode.Created:
-                        - user was successfully inserted into the database
-                    HttpStatusCode.Conflict:
-                        - user could not be registered because its username already exists in the database
-                    HttpStatusCode.OK:
-                        - user successfully logged in
-                    HttpStatusCode.Unauthorized:
-                        - user could not login because an incorrect username or password was given
-                    HttpStatusCode.InternalServerError:
-                        - the server ran into a problem when processing the input
-                */
-
+                //combinations of methods, path, and response codes that are not used result in a "page not found" response
                 case "GET":
                     switch (Path) {
-                        case "/<placeholder>":
-                            content = "<html><body><h1>Title</h1>Response</form></html>";
+                        case "/cards": //show all aquired cards
+                            //content = "<html><body><h1>Title</h1>Response</body></html>";
+                            break;
+
+                        case "/stats":
+                            status = _dbHandler.ShowStats(RequestContent, Headerparts);
                             break;
                     }
                     break;
@@ -71,44 +59,100 @@ namespace projectMTCG_loeffler {
                 case "POST":
                     switch (Path) {
                         case "/users":      //registration request
+                            /*
+                                Possible responses:
+
+                                HttpStatusCode.Created:
+                                    - user was successfully inserted into the database
+                                HttpStatusCode.Conflict:
+                                    - user could not be registered because its username already exists in the database
+                                HttpStatusCode.InternalServerError:
+                                    - the server ran into a problem when processing the input
+                            */
                             status = _dbHandler.RegisterUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.Created:
-                                    content = "<html><body><h1>Registration successful</h1>You can now proceed to login</form></html>";
+                                    content = "<html><body><h1>Registration successful</h1>You can now proceed to login</body></html>";
                                     break;
 
                                 case HttpStatusCode.Conflict:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>Username already exists. Choose a different name</form></html>";
+                                    content = $"<html><body><h1>Error {(int)status}</h1>Username already exists. Choose a different name</body></html>";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</form></html>";
+                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</body></html>";
                                     break;
                             }
                             break;
 
                         case "/sessions":   //login request
-                            status = _dbHandler.LoginUser(RequestContent, Headerparts);
+                            /*
+                                Possible responses:
+
+                                HttpStatusCode.OK:
+                                    - user successfully logged in
+                                HttpStatusCode.Unauthorized:
+                                    - user could not login because an incorrect username or password was given
+                                HttpStatusCode.InternalServerError:
+                                    - the server ran into a problem when processing the input
+                            */
+                            status = _dbHandler.AuthenticateUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
-                                    content = "<html><body><h1>Login successful</h1>View all your profile information here</form></html>";
+                                    content = "<html><body><h1>Login successful</h1>View all your profile information here</body></html>";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
-                                    content = "<html><body><h1>Login failed</h1>Username or password wrong. Try again</form></html>";
+                                    content = "<html><body><h1>Login failed</h1>Username or password wrong. Try again</body></html>";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</form></html>";
+                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</body></html>";
                                     break;
                             }
                             break;
 
-                        case "/packages":   //admin can add and regular user can acquire packages
-                            status = _dbHandler.AddPackages(RequestContent, Headerparts);
+                        case "/packages":   //admin can add and regular user can acquire packages (request requires admin token)
+                            /*
+                                Possible responses:
+
+                                HttpStatusCode.Created:
+                                    - card package was successfully added to the market
+                                HttpStatusCode.Unauthorized:
+                                    - request fails due to the user having insufficient authorization
+                                HttpStatusCode.Forbidden:
+                                    - request fails due to the user not having the required permissions for this request (administration rights)
+                                HttpStatusCode.UnprocessableEntity:
+                                    - request fails due to missing content or wrong content type being submitted
+                                HttpStatusCode.InternalServerError:
+                                    - the server ran into a problem when processing the input
+                            */
+                            status = _dbHandler.AddPackage(RequestContent, Headerparts);
                             switch (status) {
-                                
+                                case HttpStatusCode.Created:
+                                    content = "<html><body><h1>Insert successful</h1>Card package was added successfully</body></html>";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "<html><body><h1>Unauthorized</h1>Authorization is required in order to carry out this request.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "<html><body><h1>Forbidden</h1>Insufficient rights to carry out this request.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "<html><body><h1>Missing content</h1>Request is missing content or received wrong content type.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</body></html>";
+                                    break;
                             }
+                            break;
+
+                        case "/transactions/packages":
+                            //status = _dbHandler.AquirePackage(RequestContent, Headerparts);
                             break;
                     }
                     break;
@@ -116,15 +160,56 @@ namespace projectMTCG_loeffler {
                 case "PUT":
                     switch (Path) {
                         case "/<placeholder>":
-                            content = "<html><body><h1>Title</h1>Response</form></html>";
+                            content = "<html><body><h1>Title</h1>Response</body></html>";
                             break;
                     }
                     break;
 
                 case "DELETE":
                     switch (Path) {
-                        case "/<placeholder>":
-                            content = "<html><body><h1>Title</h1>Response</form></html>";
+                        case "/users": //delete user request (can only be done by admin through the admin token)
+                            /*
+                                Possible responses:
+                            
+                                HttpStatusCode.OK:
+                                    - user was successfully removed from database
+                                HttpStatusCode.Unauthorized:
+                                    - request fails due to the user having insufficient authorization
+                                HttpStatusCode.Forbidden:
+                                    - request fails due to the user not having the required permissions for this request (administration rights)
+                                HttpStatusCode.UnprocessableEntity:
+                                    - request fails due to missing content or wrong content type being submitted
+                                HttpStatusCode.NotFound:
+                                    - request fails due to the provided username not being present in the database
+                                HttpStatusCode.InternalServerError:
+                                    - the server ran into a problem when processing the input
+                            */
+                            status = _dbHandler.DeleteUser(RequestContent, Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "<html><body><h1>Deletion successful</h1>Resource successfully deleted</body></html>";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "<html><body><h1>Unauthorized</h1>Authorization is required in order to carry out this request.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "<html><body><h1>Forbidden</h1>Insufficient rights to carry out this request.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "<html><body><h1>Missing content</h1>Request is missing content or received wrong content type.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.NotFound:
+                                    content = $"<html><body><h1>Error {(int)status}</h1>Username could not be found. Deletion of user failed.</body></html>";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred when attempting to carry out the request.</body></html>";
+                                    break;
+                            }
                             break;
                     }
                     break;
