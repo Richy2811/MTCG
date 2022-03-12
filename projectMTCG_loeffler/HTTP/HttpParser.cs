@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.RegularExpressions;
 using projectMTCG_loeffler.Database;
 
 namespace projectMTCG_loeffler {
@@ -46,19 +47,39 @@ namespace projectMTCG_loeffler {
                 //combinations of methods, path, and response codes that are not used result in a "page not found" response
                 case "GET":
                     switch (Path) {
-                        case "/cards": //show all aquired cards
-                            //content = "<html><body><h1>Title</h1>Response</body></html>";
+                        case "/cards":                  //show all aquired cards
+                            status = _dbHandler.ShowStack(RequestContent, Headerparts);
                             break;
 
-                        case "/stats":
+                        case "/deck":                   //show all cards currently in the user's deck
+                            status = _dbHandler.ShowDeck(RequestContent, Headerparts);
+                            break;
+
+                        case "/deck?format=plain":      //show all cards currently in the user's deck in a different format
+                            status = _dbHandler.ShowDeckPlain(RequestContent, Headerparts);
+                            break;
+
+                        case var namepath when new Regex("^/users/\\w+$").IsMatch(namepath):    //edit user data (by username i.e. "/users/richy")
+                            status = _dbHandler.EditUser(RequestContent, Headerparts);
+                            break;
+
+                        case "/stats":                  //show user statistics
                             status = _dbHandler.ShowStats(RequestContent, Headerparts);
+                            break;
+
+                        case "/score":                  //show scoreboard
+                            status = _dbHandler.ShowScores(RequestContent, Headerparts);
+                            break;
+
+                        case "/tradings":               //show trading deals
+                            status = _dbHandler.ShowTrades(RequestContent, Headerparts);
                             break;
                     }
                     break;
 
                 case "POST":
                     switch (Path) {
-                        case "/users":      //registration request
+                        case "/users":                  //registration request
                             /*
                                 Possible responses:
 
@@ -85,7 +106,7 @@ namespace projectMTCG_loeffler {
                             }
                             break;
 
-                        case "/sessions":   //login request
+                        case "/sessions":               //login request
                             /*
                                 Possible responses:
 
@@ -112,7 +133,7 @@ namespace projectMTCG_loeffler {
                             }
                             break;
 
-                        case "/packages":   //admin can add and regular user can acquire packages (request requires admin token)
+                        case "/packages":               //admin can add and regular user can acquire packages (request requires admin token)
                             /*
                                 Possible responses:
 
@@ -151,23 +172,35 @@ namespace projectMTCG_loeffler {
                             }
                             break;
 
-                        case "/transactions/packages":
-                            //status = _dbHandler.AquirePackage(RequestContent, Headerparts);
+                        case "/transactions/packages":  //aquire a package from the market
+                            status = _dbHandler.AquirePackage(RequestContent, Headerparts);
+                            break;
+
+                        case "/battles":                //start a battle with another user
+                            status = _dbHandler.AquirePackage(RequestContent, Headerparts);
+                            break;
+
+                        case "/tradings":               //offer a trading deal
+                            status = _dbHandler.CreateTrade(RequestContent, Headerparts);
+                            break;
+
+                        case var namepath when new Regex("^/tradings/[\\w|-]+$").IsMatch(namepath): //accept trading deal (by its id)
+                            status = _dbHandler.AcceptTrade(RequestContent, Headerparts);
                             break;
                     }
                     break;
 
                 case "PUT":
                     switch (Path) {
-                        case "/<placeholder>":
-                            content = "<html><body><h1>Title</h1>Response</body></html>";
+                        case "/deck":                   //configure deck
+                            status = _dbHandler.ConfigDeck(RequestContent, Headerparts);
                             break;
                     }
                     break;
 
                 case "DELETE":
                     switch (Path) {
-                        case "/users": //delete user request (can only be done by admin through the admin token)
+                        case "/users":                  //delete user request (can only be done by admin through the admin token)
                             /*
                                 Possible responses:
                             
@@ -210,6 +243,10 @@ namespace projectMTCG_loeffler {
                                     content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred when attempting to carry out the request.</body></html>";
                                     break;
                             }
+                            break;
+
+                        case var namepath when new Regex("^/tradings/[\\w|-]+$").IsMatch(namepath): //delete trading deal (by its id)
+                            status = _dbHandler.DeleteTrade(RequestContent, Headerparts);
                             break;
                     }
                     break;
