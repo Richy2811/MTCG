@@ -64,7 +64,20 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case "/stats":                  //show user statistics
-                            status = _dbHandler.ShowStats(RequestContent, Headerparts);
+                            status = _dbHandler.Stats(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.GetStats(Headerparts["Authorization"]);
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/score":                  //show scoreboard
@@ -174,6 +187,31 @@ namespace projectMTCG_loeffler {
 
                         case "/transactions/packages":  //aquire a package from the market
                             status = _dbHandler.AquirePackage(RequestContent, Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Package successfully acquired";
+                                    break;
+
+                                case HttpStatusCode.BadRequest:
+                                    content = "Request failed, not enough coins";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Request failed, no authorization header";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Request failed, authentication invalid";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Request failed, not enough coins";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/battles":                //start a battle with another user
