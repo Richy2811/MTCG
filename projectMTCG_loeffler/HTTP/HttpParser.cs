@@ -47,27 +47,82 @@ namespace projectMTCG_loeffler {
                 //combinations of methods, path, and response codes that are not used result in a "page not found" response
                 case "GET":
                     switch (Path) {
-                        case "/cards":                  //show all aquired cards
-                            status = _dbHandler.ShowStack(RequestContent, Headerparts);
+                        case "/stack":                  //show all cards currently in the stack
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.GetCards(Headerparts, true)?.ToString() ?? "An error occurred when reading from the database. Try again later";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/deck":                   //show all cards currently in the user's deck
-                            status = _dbHandler.ShowDeck(RequestContent, Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.GetCards(Headerparts, false)?.ToString() ?? "An error occurred when reading from the database. Try again later";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/deck?format=plain":      //show all cards currently in the user's deck in a different format
-                            status = _dbHandler.ShowDeckPlain(RequestContent, Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.ShowDeckPlain(Headerparts);
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
-                        case var namepath when new Regex("^/users/\\w+$").IsMatch(namepath):    //edit user data (by username i.e. "/users/richy")
-                            status = _dbHandler.EditUser(RequestContent, Headerparts);
+                        case var namepath when new Regex("^/users/\\w+$").IsMatch(namepath):    //show user data (by username i.e. "/users/Richy")
+                            status = _dbHandler.ShowUser(Headerparts);
                             break;
 
                         case "/stats":                  //show user statistics
-                            status = _dbHandler.Stats(Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
-                                    content = _dbHandler.GetStats(Headerparts["Authorization"]);
+                                    content = _dbHandler.GetStats(Headerparts);
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
@@ -106,15 +161,15 @@ namespace projectMTCG_loeffler {
                             status = _dbHandler.RegisterUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.Created:
-                                    content = "<html><body><h1>Registration successful</h1>You can now proceed to login</body></html>";
+                                    content = "Registration successful. You can now proceed to login";
                                     break;
 
                                 case HttpStatusCode.Conflict:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>Username already exists. Choose a different name</body></html>";
+                                    content = "Error. Username already exists. Choose a different name";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</body></html>";
+                                    content = "Error. An internal server error occurred. Try again later";
                                     break;
                             }
                             break;
@@ -133,15 +188,15 @@ namespace projectMTCG_loeffler {
                             status = _dbHandler.AuthenticateUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
-                                    content = "<html><body><h1>Login successful</h1>View all your profile information here</body></html>";
+                                    content = "Login successful";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
-                                    content = "<html><body><h1>Login failed</h1>Username or password wrong. Try again</body></html>";
+                                    content = "Login failed. Username or password wrong. Try again";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</body></html>";
+                                    content = "Error. An internal server error occurred. Try again later";
                                     break;
                             }
                             break;
@@ -164,23 +219,23 @@ namespace projectMTCG_loeffler {
                             status = _dbHandler.AddPackage(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.Created:
-                                    content = "<html><body><h1>Insert successful</h1>Card package was added successfully</body></html>";
+                                    content = "Insert successful. Card package was added successfully";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
-                                    content = "<html><body><h1>Unauthorized</h1>Authorization is required in order to carry out this request.</body></html>";
+                                    content = "Unauthorized. Authorization is required in order to carry out this request";
                                     break;
 
                                 case HttpStatusCode.Forbidden:
-                                    content = "<html><body><h1>Forbidden</h1>Insufficient rights to carry out this request.</body></html>";
+                                    content = "Forbidden. Insufficient rights to carry out this request";
                                     break;
 
                                 case HttpStatusCode.UnprocessableEntity:
-                                    content = "<html><body><h1>Missing content</h1>Request is missing content or received wrong content type.</body></html>";
+                                    content = "Missing content. Request is missing content or received wrong content type";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred. Try again later</body></html>";
+                                    content = "Error. An internal server error occurred. Try again later";
                                     break;
                             }
                             break;
@@ -202,6 +257,10 @@ namespace projectMTCG_loeffler {
 
                                 case HttpStatusCode.Forbidden:
                                     content = "Request failed, authentication invalid";
+                                    break;
+
+                                case HttpStatusCode.Gone:
+                                    content = "Request failed, card pack is no longer available";
                                     break;
 
                                 case HttpStatusCode.UnprocessableEntity:
@@ -232,6 +291,35 @@ namespace projectMTCG_loeffler {
                     switch (Path) {
                         case "/deck":                   //configure deck
                             status = _dbHandler.ConfigDeck(RequestContent, Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Successfully configured deck";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Could not carry out task. Header information missing";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.BadRequest:
+                                    content = "Could not carry out task. Bad request";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
+                            break;
+
+                        case var namepath when new Regex("^/users/\\w+$").IsMatch(namepath):    //edit user data (by username i.e. "/users/Richy")
+                            status = _dbHandler.EditUser(RequestContent, Headerparts);
                             break;
                     }
                     break;
@@ -258,27 +346,27 @@ namespace projectMTCG_loeffler {
                             status = _dbHandler.DeleteUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
-                                    content = "<html><body><h1>Deletion successful</h1>Resource successfully deleted</body></html>";
+                                    content = "Deletion successful. Resource successfully deleted";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
-                                    content = "<html><body><h1>Unauthorized</h1>Authorization is required in order to carry out this request.</body></html>";
+                                    content = "Unauthorized. Authorization is required in order to carry out this request";
                                     break;
 
                                 case HttpStatusCode.Forbidden:
-                                    content = "<html><body><h1>Forbidden</h1>Insufficient rights to carry out this request.</body></html>";
+                                    content = "Insufficient rights to carry out this request";
                                     break;
 
                                 case HttpStatusCode.UnprocessableEntity:
-                                    content = "<html><body><h1>Missing content</h1>Request is missing content or received wrong content type.</body></html>";
+                                    content = "Missing content. Request is missing content or received wrong content type";
                                     break;
 
                                 case HttpStatusCode.NotFound:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>Username could not be found. Deletion of user failed.</body></html>";
+                                    content = "Error. Username could not be found. Deletion of user failed";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
-                                    content = $"<html><body><h1>Error {(int)status}</h1>An internal server error occurred when attempting to carry out the request.</body></html>";
+                                    content = "Error. An internal server error occurred when attempting to carry out the request";
                                     break;
                             }
                             break;
@@ -294,10 +382,13 @@ namespace projectMTCG_loeffler {
             Write(writer, $"HTTP/1.1 {(int)status} {status}");
             Write(writer, "Server: My simple HttpServer");
             Write(writer, $"Current Time: {DateTime.Now}");
-            Write(writer, $"Content-Length: {content.Length}");
-            Write(writer, "Content-Type: text/html; charset=utf-8");
+            if (content != null) {
+                Write(writer, $"Content-Length: {content.Length}");
+                Write(writer, "Content-Type: text/plain; charset=utf-8");
+            }
             Write(writer, "");
             Write(writer, content);
+
             writer.WriteLine();
 
             writer.Close();

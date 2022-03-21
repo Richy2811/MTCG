@@ -83,20 +83,82 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
+        public HttpStatusCode CheckToken(Dictionary<string, string> headerParts) {
+            if (!headerParts.ContainsKey("Authorization")) {
+                return HttpStatusCode.Forbidden;
+            }
+
+            string[] authorization = headerParts["Authorization"].Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+
+            return VerifyPassword(userinfo[0], userinfo[1]);
+        }
+
+        
         #region GET Requests
 
-        public HttpStatusCode ShowStack(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+        public JArray GetCards(Dictionary<string, string> headerParts, bool getStack) {
+            string[] auth = headerParts["Authorization"].Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(auth[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+
+            JArray cardStack = JArray.Parse("[]");
+
+            string selectStack;
+            //if flag is set to true then return stack of user; else return deck of user
+            selectStack = getStack ? "SELECT cardstack FROM users WHERE username = @uname" : "SELECT carddeck FROM users WHERE username = @uname";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                //return null if an error occured
+                return null;
+            }
+
+            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
+            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+            selectStackCommand.Prepare();
+            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
+            if (queryreader.Read()) {   //there should only be one result
+                if (!DBNull.Value.Equals(queryreader[0])) {
+                    cardStack = JArray.Parse(queryreader[0].ToString());
+                }
+                return cardStack;
+            }
+            else {
+                return null;
+            }
         }
 
 
-        public HttpStatusCode ShowDeck(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
-        }
+        public string ShowDeckPlain(Dictionary<string, string> headerParts) {
+            string[] auth = headerParts["Authorization"].Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(auth[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
 
+            JArray userDeck = GetCards(headerParts, false);
+            StringBuilder userDeckPlain = new StringBuilder();
 
-        public HttpStatusCode ShowDeckPlain(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+            int i = 1;
+            Dictionary<string, string> deserialCards;
+            foreach (JObject card in userDeck) {
+                userDeckPlain.AppendLine("Card " + i);
+                deserialCards = JsonConvert.DeserializeObject<Dictionary<string, string>>(card.ToString());
+                foreach (var kvPair in deserialCards) {
+                    userDeckPlain.AppendLine(kvPair.Key + ": " + kvPair.Value);
+                }
+                userDeckPlain.AppendLine();
+                i++;
+            }
+
+            return userDeckPlain.ToString();
         }
 
 
@@ -105,8 +167,8 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public string GetStats(string authorization) {
-            string[] auth = authorization.Split(" ");
+        public string GetStats(Dictionary<string, string> headerParts) {
+            string[] auth = headerParts["Authorization"].Split(" ");
             byte[] userinfoencoded = Convert.FromBase64String(auth[1]);
             string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
             string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
@@ -126,25 +188,12 @@ namespace projectMTCG_loeffler.Database {
             command.Prepare();
             NpgsqlDataReader queryreader = command.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
-                return $"{{Username: {userinfo[0]}, Coins: {queryreader[0]}, ELO: {queryreader[1]}}}";
+                JObject userStats = JObject.Parse($"{{Username: \"{userinfo[0]}\", Coins: {queryreader[0]}, ELO: {queryreader[1]}}}");
+                return userStats.ToString();
             }
             else {
                 return "An error occurred";
             }
-        }
-
-
-        public HttpStatusCode Stats(Dictionary<string, string> headerParts) {
-            if (!headerParts.ContainsKey("Authorization")) {
-                return HttpStatusCode.Unauthorized;
-            }
-
-            string[] authorization = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
-
-            return VerifyPassword(userinfo[0], userinfo[1]);
         }
 
 
@@ -395,7 +444,7 @@ namespace projectMTCG_loeffler.Database {
                     price = (int)queryreader[1];
                 }
                 else {
-                    return HttpStatusCode.InternalServerError;
+                    return HttpStatusCode.Gone;
                 }
                 queryreader.Close();
 
@@ -403,7 +452,6 @@ namespace projectMTCG_loeffler.Database {
                 Console.WriteLine($"Price: {price}");
                 Console.WriteLine($"Package: {cardPackage}");
                 Console.WriteLine($"CardStack: {userStack}");
-                //todo
                 //handle coins, price and cardpackage
                 if ((coins - price) >= 0) {
                     //user has enough coins to buy package -> update user coin value -> add cards to their stack
@@ -478,7 +526,84 @@ namespace projectMTCG_loeffler.Database {
 
         #region PUT requests
 
-        public HttpStatusCode ConfigDeck(string userJsonString, Dictionary<string, string> headerParts) {
+        public HttpStatusCode ConfigDeck(string idJsonString, Dictionary<string, string> headerParts) {
+            if (!headerParts.ContainsKey("Authorization")) {
+                return HttpStatusCode.Forbidden;
+            }
+            JArray idArray;
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //parse jsonstring
+                    idArray = JArray.Parse(idJsonString);
+                    if (idArray.Count != 4) {
+                        return HttpStatusCode.BadRequest;
+                    }
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in PUT request /deck");
+                return HttpStatusCode.UnprocessableEntity;
+            }
+
+            string[] authorization = headerParts["Authorization"].Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+
+            if (VerifyPassword(userinfo[0], userinfo[1]) == HttpStatusCode.OK) {
+                JArray userStack = GetCards(headerParts, true);
+                JArray userDeck = GetCards(headerParts, false);
+                //first put all cards from the deck back into the stack
+                foreach (JToken card in userDeck) {
+                    userStack.Add(card);
+                }
+                userDeck.Clear();
+                //then search for given id's
+                foreach (JToken id in idArray) {
+                    foreach (JObject card in userStack) {
+                        if (card.GetValue("Id").ToString() == id.ToString()) {
+                            userDeck.Add(card);
+                            userStack.Remove(card);
+                            break;
+                        }
+                    }
+                }
+                if (userDeck.Count != 4) {
+                    return HttpStatusCode.BadRequest;
+                }
+
+                string updateStackAndDeck = "UPDATE users SET cardstack = @newstack, carddeck = @newdeck WHERE username = @uname";
+                NpgsqlConnection conn = new NpgsqlConnection(_connString);
+                try {
+                    conn.Open();
+                }
+                catch (Exception e) {
+                    Console.WriteLine($"Error {e.Message}");
+                    return HttpStatusCode.InternalServerError;
+                }
+                NpgsqlCommand updateCommand = new NpgsqlCommand(updateStackAndDeck, conn);
+                updateCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userStack.ToString());
+                updateCommand.Parameters.AddWithValue("newdeck", NpgsqlDbType.Jsonb, userDeck.ToString());
+                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+                updateCommand.Prepare();
+                if (updateCommand.ExecuteNonQuery() == 1) {
+                    return HttpStatusCode.OK;
+                }
+                else {
+                    return HttpStatusCode.InternalServerError;
+                }
+            }
+            else {
+                return VerifyPassword(userinfo[0], userinfo[1]);
+            }
+        }
+
+        public HttpStatusCode ShowUser(Dictionary<string, string> headerParts) {
             return HttpStatusCode.OK;
         }
 
