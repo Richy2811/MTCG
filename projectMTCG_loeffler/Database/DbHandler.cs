@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
@@ -83,27 +84,161 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
+        public string BasicAuthGetUsername(string authHeader) {
+            string[] authorization = authHeader.Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+
+            return userinfo[0];
+        }
+
+
+        private string BasicAuthGetPassword(string authHeader) {
+            string[] authorization = authHeader.Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+
+            return userinfo[1];
+        }
+
+
         public HttpStatusCode CheckToken(Dictionary<string, string> headerParts) {
             if (!headerParts.ContainsKey("Authorization")) {
                 return HttpStatusCode.Forbidden;
             }
 
-            string[] authorization = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-            return VerifyPassword(userinfo[0], userinfo[1]);
+            return VerifyPassword(username, password);
         }
 
-        
+
+        public decimal GetEloRating(string username) {
+            string selectElo = "SELECT elo FROM users WHERE username = @uname";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                throw new Exception("Could not establish connection to database");
+            }
+
+            NpgsqlCommand selectEloCommand = new NpgsqlCommand(selectElo, conn);
+            selectEloCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            selectEloCommand.Prepare();
+
+            //get values from winner
+            NpgsqlDataReader queryReader = selectEloCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                return (decimal)queryReader[0];
+            }
+            else {
+                throw new Exception("Could not retrieve data from database");
+            }
+        }
+
+
+        public void UpdateElo(string winner, string loser) {
+            int winningPlayerWins, losingPlayerWins, winningPlayerLosses, losingPlayerLosses;
+            winningPlayerWins = losingPlayerWins = winningPlayerLosses = losingPlayerLosses = 0;
+            decimal winningPlayerElo = 0, losingPlayerElo = 0;
+
+            int kValue = 20;
+            
+            string selectStats = "SELECT wins, losses, elo FROM users WHERE username = @uname";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return;
+            }
+
+            NpgsqlCommand selectStatsCommand = new NpgsqlCommand(selectStats, conn);
+            selectStatsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, winner);
+            selectStatsCommand.Prepare();
+
+            //get values from winner
+            NpgsqlDataReader queryReader = selectStatsCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                winningPlayerWins = (int)queryReader[0] + 1;
+                winningPlayerLosses = (int)queryReader[1];
+                winningPlayerElo = (decimal)queryReader[2];
+            }
+            queryReader.Close();
+            selectStatsCommand.Unprepare();
+            selectStatsCommand.Parameters.Clear();
+
+
+            //reuse command for losing player
+            selectStatsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, loser);
+            selectStatsCommand.Prepare();
+
+            queryReader = selectStatsCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                losingPlayerWins = (int)queryReader[0];
+                losingPlayerLosses = (int)queryReader[1] + 1;
+                losingPlayerElo = (decimal)queryReader[2];
+            }
+            queryReader.Close();
+            selectStatsCommand.Unprepare();
+            selectStatsCommand.Parameters.Clear();
+
+            float winningPlayerFinalElo;
+            float losingPlayerFinalElo;
+
+            //calculate expected result change of winning player
+            float expectedResult = 1 / (1 + MathF.Pow(10, ((float)winningPlayerElo - (float)losingPlayerElo) / 400));
+            
+            Console.WriteLine($"Expected: {expectedResult}");
+
+            //calculate final result of both players
+            winningPlayerFinalElo = (float)winningPlayerElo + kValue * expectedResult;
+            losingPlayerFinalElo = (float)losingPlayerElo - kValue * expectedResult;
+
+            Console.WriteLine(winningPlayerFinalElo);
+            Console.WriteLine(losingPlayerFinalElo);
+
+            string updateString = "UPDATE users SET wins = @newwins, losses = @newlosses, elo = @newelo WHERE username = @uname";
+            NpgsqlCommand updateCommand = new NpgsqlCommand(updateString, conn);
+            updateCommand.Parameters.AddWithValue("newwins", NpgsqlDbType.Integer, winningPlayerWins);
+            updateCommand.Parameters.AddWithValue("newlosses", NpgsqlDbType.Integer, winningPlayerLosses);
+            updateCommand.Parameters.AddWithValue("newelo", NpgsqlDbType.Numeric, (decimal)winningPlayerFinalElo);
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, winner);
+            updateCommand.Prepare();
+
+            if (updateCommand.ExecuteNonQuery() != 1) {
+                Console.Error.WriteLine("Something went wrong when updating player statistics");
+                conn.Close();
+                return;
+            }
+            updateCommand.Unprepare();
+            updateCommand.Parameters.Clear();
+
+
+            updateCommand.Parameters.AddWithValue("newwins", NpgsqlDbType.Integer, losingPlayerWins);
+            updateCommand.Parameters.AddWithValue("newlosses", NpgsqlDbType.Integer, losingPlayerLosses);
+            updateCommand.Parameters.AddWithValue("newelo", NpgsqlDbType.Numeric, (decimal)losingPlayerFinalElo);
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, loser);
+            updateCommand.Prepare();
+            
+            if (updateCommand.ExecuteNonQuery() != 1) {
+                Console.Error.WriteLine("Something went wrong when updating player statistics");
+                conn.Close();
+                return;
+            }
+        }
+
+
         #region GET Requests
 
         public JArray GetCards(Dictionary<string, string> headerParts, bool getStack) {
-            string[] auth = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(auth[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
 
             JArray cardStack = JArray.Parse("[]");
 
@@ -122,27 +257,59 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
-            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
             selectStackCommand.Prepare();
             NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
                 if (!DBNull.Value.Equals(queryreader[0])) {
                     cardStack = JArray.Parse(queryreader[0].ToString());
                 }
+                conn.Close();
                 return cardStack;
             }
             else {
+                conn.Close();
+                return null;
+            }
+        }
+
+
+        public JArray GetCards(string username, bool getStack) {
+            JArray cardStack = JArray.Parse("[]");
+
+            string selectStack;
+            //if flag is set to true then return stack of user; else return deck of user
+            selectStack = getStack ? "SELECT cardstack FROM users WHERE username = @uname" : "SELECT carddeck FROM users WHERE username = @uname";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                //return null if an error occured
+                return null;
+            }
+
+            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
+            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            selectStackCommand.Prepare();
+            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
+            if (queryreader.Read()) {   //there should only be one result
+                if (!DBNull.Value.Equals(queryreader[0])) {
+                    cardStack = JArray.Parse(queryreader[0].ToString());
+                }
+                conn.Close();
+                return cardStack;
+            }
+            else {
+                conn.Close();
                 return null;
             }
         }
 
 
         public string ShowDeckPlain(Dictionary<string, string> headerParts) {
-            string[] auth = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(auth[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
-
             JArray userDeck = GetCards(headerParts, false);
             StringBuilder userDeckPlain = new StringBuilder();
 
@@ -158,7 +325,12 @@ namespace projectMTCG_loeffler.Database {
                 i++;
             }
 
-            return userDeckPlain.ToString();
+            if (userDeckPlain.Length == 0) {
+                return "Empty";
+            }
+            else {
+                return userDeckPlain.ToString();
+            }
         }
 
 
@@ -168,12 +340,9 @@ namespace projectMTCG_loeffler.Database {
 
 
         public string GetStats(Dictionary<string, string> headerParts) {
-            string[] auth = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(auth[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
 
-            string selectPassword = "SELECT coins, elo FROM users WHERE username = @uname";
+            string selectPassword = "SELECT coins, wins, losses, elo FROM users WHERE username = @uname";
             NpgsqlConnection conn = new NpgsqlConnection(_connString);
             try {
                 conn.Open();
@@ -184,14 +353,22 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand command = new NpgsqlCommand(selectPassword, conn);
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
             command.Prepare();
             NpgsqlDataReader queryreader = command.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
-                JObject userStats = JObject.Parse($"{{Username: \"{userinfo[0]}\", Coins: {queryreader[0]}, ELO: {queryreader[1]}}}");
+                NumberFormatInfo format = new NumberFormatInfo();
+                format.NumberDecimalSeparator = ".";
+                decimal elo = (decimal)queryreader[3];
+                float winLoseRatio = (float)(int)queryreader[1] / ((float)(int)queryreader[1] + (float)(int)queryreader[2]);
+                //read into jobject to return indented json format
+                JObject userStats = JObject.Parse($"{{Username: \"{username}\", Coins: {queryreader[0]}, Wins: {queryreader[1]}, Losses: {queryreader[2]}, \"Win/Lose Ratio\": {winLoseRatio}, ELO: {elo.ToString(format)}}}");
+                
+                conn.Close();
                 return userStats.ToString();
             }
             else {
+                conn.Close();
                 return "An error occurred";
             }
         }
@@ -242,7 +419,7 @@ namespace projectMTCG_loeffler.Database {
                 return HttpStatusCode.InternalServerError;
             }
 
-            string insertUser = "INSERT INTO users (username, password, coins, elo) VALUES (@uname, @passw, 20, 100)";
+            string insertUser = "INSERT INTO users (username, password, coins, wins, losses, elo) VALUES (@uname, @passw, 20, 0, 0, 1000)";
             NpgsqlCommand command = new NpgsqlCommand(insertUser, conn);
             command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userObject["Username"].ToString());
             command.Parameters.AddWithValue("passw", NpgsqlDbType.Varchar, 64, hashedPasswordStr);
@@ -298,12 +475,10 @@ namespace projectMTCG_loeffler.Database {
         public HttpStatusCode AddPackage(string packageJsonString, Dictionary<string, string> headerParts) {
             //check admin token
             if (headerParts.ContainsKey("Authorization")) {
-                string[] authorization = headerParts["Authorization"].Split(" ");
-                byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-                string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-                string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+                string username = BasicAuthGetUsername(headerParts["Authorization"]);
+                string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-                if (VerifyPassword(userinfo[0], userinfo[1]) != HttpStatusCode.OK) {
+                if (VerifyPassword(username, password) != HttpStatusCode.OK) {
                     return HttpStatusCode.Forbidden;
                 }
             }
@@ -385,12 +560,10 @@ namespace projectMTCG_loeffler.Database {
                 return HttpStatusCode.UnprocessableEntity;
             }
 
-            string[] authorization = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-            if (VerifyPassword(userinfo[0], userinfo[1]) == HttpStatusCode.OK) {
+            if (VerifyPassword(username, password) == HttpStatusCode.OK) {
                 //token ok, add package with given id in json string if coins are sufficient
                 int coins = 0;
                 int price = Int32.MaxValue;
@@ -412,7 +585,7 @@ namespace projectMTCG_loeffler.Database {
                 NpgsqlCommand coinsCommand = new NpgsqlCommand(selectUser, conn);
                 NpgsqlCommand packageCommand = new NpgsqlCommand(selectPackage, conn);
 
-                coinsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+                coinsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
                 packageCommand.Parameters.AddWithValue("id", NpgsqlDbType.Integer, wantedPackId["Id"].Value<int>());
 
                 coinsCommand.Prepare();
@@ -434,6 +607,7 @@ namespace projectMTCG_loeffler.Database {
                     }
                 }
                 else {
+                    conn.Close();
                     return HttpStatusCode.InternalServerError;
                 }
 
@@ -444,14 +618,10 @@ namespace projectMTCG_loeffler.Database {
                     price = (int)queryreader[1];
                 }
                 else {
+                    conn.Close();
                     return HttpStatusCode.Gone;
                 }
                 queryreader.Close();
-
-                Console.WriteLine($"Coins: {coins}");
-                Console.WriteLine($"Price: {price}");
-                Console.WriteLine($"Package: {cardPackage}");
-                Console.WriteLine($"CardStack: {userStack}");
                 //handle coins, price and cardpackage
                 if ((coins - price) >= 0) {
                     //user has enough coins to buy package -> update user coin value -> add cards to their stack
@@ -475,7 +645,7 @@ namespace projectMTCG_loeffler.Database {
                     NpgsqlCommand updateCommand = new NpgsqlCommand(updateCoins, conn);
                     updateCommand.Parameters.AddWithValue("newcoins", NpgsqlDbType.Integer, coins - price);
                     updateCommand.Parameters.AddWithValue("newcardstack", NpgsqlDbType.Jsonb, userStack.ToString());
-                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
                     updateCommand.Prepare();
 
                     try {
@@ -499,17 +669,13 @@ namespace projectMTCG_loeffler.Database {
                 }
                 else {
                     //not enough coins
+                    conn.Close();
                     return HttpStatusCode.BadRequest;
                 }
             }
             else {
-                return VerifyPassword(userinfo[0], userinfo[1]);
+                return VerifyPassword(username, password);
             }
-        }
-
-
-        public HttpStatusCode StartBattle(string packageJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
         }
 
 
@@ -550,12 +716,10 @@ namespace projectMTCG_loeffler.Database {
                 return HttpStatusCode.UnprocessableEntity;
             }
 
-            string[] authorization = headerParts["Authorization"].Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-            if (VerifyPassword(userinfo[0], userinfo[1]) == HttpStatusCode.OK) {
+            if (VerifyPassword(username, password) == HttpStatusCode.OK) {
                 JArray userStack = GetCards(headerParts, true);
                 JArray userDeck = GetCards(headerParts, false);
                 //first put all cards from the deck back into the stack
@@ -589,17 +753,19 @@ namespace projectMTCG_loeffler.Database {
                 NpgsqlCommand updateCommand = new NpgsqlCommand(updateStackAndDeck, conn);
                 updateCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userStack.ToString());
                 updateCommand.Parameters.AddWithValue("newdeck", NpgsqlDbType.Jsonb, userDeck.ToString());
-                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userinfo[0]);
+                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
                 updateCommand.Prepare();
                 if (updateCommand.ExecuteNonQuery() == 1) {
+                    conn.Close();
                     return HttpStatusCode.OK;
                 }
                 else {
+                    conn.Close();
                     return HttpStatusCode.InternalServerError;
                 }
             }
             else {
-                return VerifyPassword(userinfo[0], userinfo[1]);
+                return VerifyPassword(username, password);
             }
         }
 
@@ -614,12 +780,10 @@ namespace projectMTCG_loeffler.Database {
         public HttpStatusCode DeleteUser(string userJsonString, Dictionary<string, string> headerParts) {
             //check admin token
             if (headerParts.ContainsKey("Authorization")) {
-                string[] authorization = headerParts["Authorization"].Split(" ");
-                byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-                string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-                string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+                string username = BasicAuthGetUsername(headerParts["Authorization"]);
+                string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-                if (VerifyPassword(userinfo[0], userinfo[1]) != HttpStatusCode.OK) {
+                if (VerifyPassword(username, password) != HttpStatusCode.OK) {
                     return HttpStatusCode.Forbidden;
                 }
             }

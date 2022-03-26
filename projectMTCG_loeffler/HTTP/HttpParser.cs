@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.RegularExpressions;
+using projectMTCG_loeffler.Battle;
 using projectMTCG_loeffler.Database;
 
 namespace projectMTCG_loeffler {
@@ -13,7 +14,8 @@ namespace projectMTCG_loeffler {
         private TcpClient _socket;
         private HttpRequestHandler _handler;
         private DbHandler _dbHandler;
-        private bool _mvpset;
+        private bool _mvpset;                                               //method version path flag
+        private BattleHandler _battleHandler;
 
 
         public string Method { get; private set; }                          //request method (GET, POST, PUT, DELETE, ...)
@@ -274,7 +276,30 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case "/battles":                //start a battle with another user
-                            status = _dbHandler.AquirePackage(RequestContent, Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    try {
+                                        _battleHandler = new BattleHandler(RequestContent, Headerparts, _dbHandler);
+                                        content = _battleHandler.StartBattle();
+                                    }
+                                    catch (Exception e) {
+                                        Console.Error.WriteLine($"Error, {e.Message}");
+                                    }
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/tradings":               //offer a trading deal
@@ -309,7 +334,7 @@ namespace projectMTCG_loeffler {
                                     break;
 
                                 case HttpStatusCode.BadRequest:
-                                    content = "Could not carry out task. Bad request";
+                                    content = "Could not carry out task. Four acquired cards have to be chosen to be in the deck";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:

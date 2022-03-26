@@ -21,7 +21,7 @@ namespace projectMTCG_loeffler.Test {
                 new Wizzard("0101-m1n1-o1p2-q1r3", "Waterpulse", 19, Element.Water),
                 new Ork("0101-s1t4-u1v5-w1x6", "Jorg", 19, Element.Normal)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Anton", "Lucas", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -46,7 +46,7 @@ namespace projectMTCG_loeffler.Test {
                 new Spell("0101-m1n1-o1p2-q1r3", "Meteor", 19, Element.Fire),
                 new Spell("0101-s1t4-u1v5-w1x6", "Hurricane", 19, Element.Normal)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Victor", "Gloria", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -71,7 +71,7 @@ namespace projectMTCG_loeffler.Test {
                 new Spell("0101-m1n1-o1p2-q1r3", "Seastorm", 21, Element.Water),
                 new Spell("0101-s1t4-u1v5-w1x6", "Bubble", 21, Element.Water)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Yumi", "Sonja", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -96,7 +96,7 @@ namespace projectMTCG_loeffler.Test {
                 new Spell("0101-m1n1-o1p2-q1r3", "Waterpulse", 19, Element.Water),
                 new Spell("0101-s1t4-u1v5-w1x6", "Avalange", 19, Element.Normal)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Adam", "Perla", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -121,7 +121,7 @@ namespace projectMTCG_loeffler.Test {
                 new Dragon("0101-a0b1-c2d3-e4f5", "Ighnar", 10, Element.Fire),
                 new Dragon("0101-g6h7-i8j9-k1l0", "Lypthra", 10, Element.Normal)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Robert", "Daniel", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -146,7 +146,7 @@ namespace projectMTCG_loeffler.Test {
                 new Wizzard("0101-a0b1-c2d3-e4f5", "Lorth", 10, Element.Fire),
                 new Wizzard("0101-g6h7-i8j9-k1l0", "Andra", 10, Element.Normal)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Nina", "Bob", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -171,7 +171,7 @@ namespace projectMTCG_loeffler.Test {
                 new Spell("0101-a0b1-c2d3-e4f5", "Flood", 10, Element.Water),
                 new Spell("0101-g6h7-i8j9-k1l0", "River Rain", 10, Element.Water)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Paul", "Austin", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -196,7 +196,7 @@ namespace projectMTCG_loeffler.Test {
                 new Kraken("0101-a0b1-c2d3-e4f5", "Yffdra", 10, Element.Fire),
                 new Kraken("0101-g6h7-i8j9-k1l0", "Olsmurah", 10, Element.Fire)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("George", "Albert", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
@@ -221,7 +221,7 @@ namespace projectMTCG_loeffler.Test {
                 new FireElve("0101-m1n1-o1p2-q1r3", "Lyjra", 10, Element.Water),
                 new FireElve("0101-s1t4-u1v5-w1x6", "Iunise", 10, Element.Normal)
             };
-            var battle = new BattleHandler(p_One_Cards, p_Two_Cards);
+            var battle = new BattleHandler("Cassandra", "Rex", p_One_Cards, p_Two_Cards);
 
             //act
             battle.StartBattle();
