@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -386,12 +385,13 @@ namespace projectMTCG_loeffler.Database {
             command.Prepare();
             NpgsqlDataReader queryreader = command.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
+                //format decimal numbers so they use '.' as the separator in order for JObject.Parse() to work
                 NumberFormatInfo format = new NumberFormatInfo();
                 format.NumberDecimalSeparator = ".";
                 decimal elo = (decimal)queryreader[3];
                 float winLoseRatio = (float)(int)queryreader[1] / ((float)(int)queryreader[1] + (float)(int)queryreader[2]);
                 //read into jobject to return indented json format
-                JObject userStats = JObject.Parse($"{{Username: \"{username}\", Coins: {queryreader[0]}, Wins: {queryreader[1]}, Losses: {queryreader[2]}, \"Win/Lose Ratio\": {winLoseRatio}, ELO: {elo.ToString(format)}}}");
+                JObject userStats = JObject.Parse($"{{Username: \"{username}\", Coins: {queryreader[0]}, Wins: {queryreader[1]}, Losses: {queryreader[2]}, \"Win/Lose Ratio\": {winLoseRatio.ToString(format)}, ELO: {elo.ToString(format)}}}");
                 
                 conn.Close();
                 return userStats.ToString();
