@@ -138,7 +138,24 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case "/score":                  //show scoreboard
-                            status = _dbHandler.ShowScores(RequestContent, Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.ShowScores();
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/tradings":               //show trading deals

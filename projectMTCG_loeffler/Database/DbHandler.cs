@@ -39,7 +39,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand command = new NpgsqlCommand(selectPassword, conn);
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
             command.Prepare();
 
             NpgsqlDataReader queryreader = command.ExecuteReader();
@@ -128,7 +128,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand selectEloCommand = new NpgsqlCommand(selectElo, conn);
-            selectEloCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            selectEloCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
             selectEloCommand.Prepare();
 
             //get values from winner
@@ -160,7 +160,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand selectStatsCommand = new NpgsqlCommand(selectStats, conn);
-            selectStatsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, winner);
+            selectStatsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, winner);
             selectStatsCommand.Prepare();
 
             //get values from winner
@@ -176,7 +176,7 @@ namespace projectMTCG_loeffler.Database {
 
 
             //reuse command for losing player
-            selectStatsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, loser);
+            selectStatsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, loser);
             selectStatsCommand.Prepare();
 
             queryReader = selectStatsCommand.ExecuteReader();
@@ -209,7 +209,7 @@ namespace projectMTCG_loeffler.Database {
             updateCommand.Parameters.AddWithValue("newwins", NpgsqlDbType.Integer, winningPlayerWins);
             updateCommand.Parameters.AddWithValue("newlosses", NpgsqlDbType.Integer, winningPlayerLosses);
             updateCommand.Parameters.AddWithValue("newelo", NpgsqlDbType.Numeric, (decimal)winningPlayerFinalElo);
-            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, winner);
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, winner);
             updateCommand.Prepare();
 
             if (updateCommand.ExecuteNonQuery() != 1) {
@@ -224,7 +224,7 @@ namespace projectMTCG_loeffler.Database {
             updateCommand.Parameters.AddWithValue("newwins", NpgsqlDbType.Integer, losingPlayerWins);
             updateCommand.Parameters.AddWithValue("newlosses", NpgsqlDbType.Integer, losingPlayerLosses);
             updateCommand.Parameters.AddWithValue("newelo", NpgsqlDbType.Numeric, (decimal)losingPlayerFinalElo);
-            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, loser);
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, loser);
             updateCommand.Prepare();
             
             if (updateCommand.ExecuteNonQuery() != 1) {
@@ -257,7 +257,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
-            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
             selectStackCommand.Prepare();
             NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
@@ -292,7 +292,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
-            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
             selectStackCommand.Prepare();
             NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
@@ -353,7 +353,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand command = new NpgsqlCommand(selectPassword, conn);
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
             command.Prepare();
             NpgsqlDataReader queryreader = command.ExecuteReader();
             if (queryreader.Read()) {   //there should only be one result
@@ -374,8 +374,38 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public HttpStatusCode ShowScores(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+        public string ShowScores() {
+            string selectScores = "SELECT username, wins, losses, elo FROM users WHERE NOT username = 'Administrator' ORDER BY elo DESC";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return "Error";
+            }
+            NpgsqlCommand selectScoresCommand = new NpgsqlCommand(selectScores, conn);
+            NpgsqlDataReader queryreader = selectScoresCommand.ExecuteReader();
+
+            StringBuilder returnString = new StringBuilder();
+            returnString.AppendLine($"|{String.Format("{0, 8}", "Rank")}|{String.Format("{0, 20}", "Username")}|{String.Format("{0, 10}", "Wins")}|{String.Format("{0, 10}", "Losses")}|{String.Format("{0, 10}", "W/L Ratio")}|{String.Format("{0, 12}", "ELO")}|");
+            returnString.AppendLine("|--------+--------------------+----------+----------+----------+------------|");
+            //get data set of all users excluding the administrator
+            int i = 0;
+            float winLoseRatio = 0;
+            decimal previousElo = Decimal.MaxValue;
+            while (queryreader.Read()) {
+                //if previous player has the same elo value the placement gets shared
+                if ((decimal)queryreader[3] != previousElo) {
+                    i++;
+                }
+                previousElo = (decimal)queryreader[3];
+
+                winLoseRatio = (float)(int)queryreader[1] / ((float)(int)queryreader[1] + (float)(int)queryreader[2]);
+                returnString.AppendLine($"|{String.Format("{0, 8}", i)}|{String.Format("{0, 20}", queryreader[0])}|{String.Format("{0, 10}", queryreader[1])}|{String.Format("{0, 10}", queryreader[2])}|{String.Format("{0, 10}", winLoseRatio)}|{String.Format("{0, 12}", queryreader[3])}|");
+            }
+            conn.Close();
+            return returnString.ToString();
         }
 
 
@@ -421,7 +451,7 @@ namespace projectMTCG_loeffler.Database {
 
             string insertUser = "INSERT INTO users (username, password, coins, wins, losses, elo) VALUES (@uname, @passw, 20, 0, 0, 1000)";
             NpgsqlCommand command = new NpgsqlCommand(insertUser, conn);
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userObject["Username"].ToString());
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, userObject["Username"].ToString());
             command.Parameters.AddWithValue("passw", NpgsqlDbType.Varchar, 64, hashedPasswordStr);
             command.Prepare();
 
@@ -585,7 +615,7 @@ namespace projectMTCG_loeffler.Database {
                 NpgsqlCommand coinsCommand = new NpgsqlCommand(selectUser, conn);
                 NpgsqlCommand packageCommand = new NpgsqlCommand(selectPackage, conn);
 
-                coinsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+                coinsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
                 packageCommand.Parameters.AddWithValue("id", NpgsqlDbType.Integer, wantedPackId["Id"].Value<int>());
 
                 coinsCommand.Prepare();
@@ -645,7 +675,7 @@ namespace projectMTCG_loeffler.Database {
                     NpgsqlCommand updateCommand = new NpgsqlCommand(updateCoins, conn);
                     updateCommand.Parameters.AddWithValue("newcoins", NpgsqlDbType.Integer, coins - price);
                     updateCommand.Parameters.AddWithValue("newcardstack", NpgsqlDbType.Jsonb, userStack.ToString());
-                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
                     updateCommand.Prepare();
 
                     try {
@@ -753,7 +783,7 @@ namespace projectMTCG_loeffler.Database {
                 NpgsqlCommand updateCommand = new NpgsqlCommand(updateStackAndDeck, conn);
                 updateCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userStack.ToString());
                 updateCommand.Parameters.AddWithValue("newdeck", NpgsqlDbType.Jsonb, userDeck.ToString());
-                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, username);
+                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
                 updateCommand.Prepare();
                 if (updateCommand.ExecuteNonQuery() == 1) {
                     conn.Close();
@@ -824,7 +854,7 @@ namespace projectMTCG_loeffler.Database {
 
             NpgsqlCommand command = new NpgsqlCommand(deleteUser, conn);
 
-            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 50, userObject["Username"].ToString());
+            command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, userObject["Username"].ToString());
 
             command.Prepare();
 
