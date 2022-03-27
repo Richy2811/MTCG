@@ -113,7 +113,24 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case var namepath when new Regex("^/users/\\w+$").IsMatch(namepath):    //show user data (by username i.e. "/users/Richy")
-                            status = _dbHandler.ShowUser(Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.ShowUser(Headerparts, Path);
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
                         case "/stats":                  //show user statistics
@@ -361,7 +378,28 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case var namepath when new Regex("^/users/\\w+$").IsMatch(namepath):    //edit user data (by username i.e. "/users/Richy")
-                            status = _dbHandler.EditUser(RequestContent, Headerparts);
+                            status = _dbHandler.EditUser(RequestContent, Headerparts, Path);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Successfully changed user data";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Could not carry out task. Header information missing";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
                     }
                     break;

@@ -334,8 +334,37 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public HttpStatusCode EditUser(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+        public string ShowUser(Dictionary<string, string> headerParts, string path) {
+            string pathUsername = path.Split("/users/")[1];
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+
+            if (pathUsername == username) {
+                string selectUserData = "SELECT username, status, country FROM users WHERE username = @uname";
+                NpgsqlConnection conn = new NpgsqlConnection(_connString);
+                try {
+                    conn.Open();
+                }
+                catch (Exception e) {
+                    Console.WriteLine($"Error {e.Message}");
+                    return "Error";
+                }
+
+                NpgsqlCommand userDataCommand = new NpgsqlCommand(selectUserData, conn);
+                userDataCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, pathUsername);
+                userDataCommand.Prepare();
+                NpgsqlDataReader queryReader = userDataCommand.ExecuteReader();
+                if (queryReader.Read()) {
+                    JObject userData = JObject.Parse($"{{Username: \"{queryReader[0]}\", Status: \"{queryReader[1]}\", Country: \"{queryReader[2]}\"}}");
+                    conn.Close();
+                    return userData.ToString();
+                }
+                else {
+                    return "Error";
+                }
+            }
+            else {
+                return "Unauthorized";
+            }
         }
 
 
@@ -799,8 +828,61 @@ namespace projectMTCG_loeffler.Database {
             }
         }
 
-        public HttpStatusCode ShowUser(Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+        public HttpStatusCode EditUser(string userUpdateJsonString, Dictionary<string, string> headerParts, string path) {
+            if (CheckToken(headerParts) == HttpStatusCode.OK) {
+                string pathUsername = path.Split("/users/")[1];
+                string username = BasicAuthGetUsername(headerParts["Authorization"]);
+                JObject userUpdateData;
+                //check if header contains json content
+                if (headerParts.ContainsKey("Content-Type")) {
+                    if (headerParts["Content-Type"] == "application/json") {
+                        //parse jsonstring
+                        userUpdateData = JObject.Parse(userUpdateJsonString);
+                    }
+                    else {
+                        Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                        return HttpStatusCode.UnprocessableEntity;
+                    }
+                }
+                else {
+                    Console.Error.WriteLine($"Missing content in PUT request {path}");
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+
+                //check if the user actually tries to edit their own user data
+                if (pathUsername == username) {
+                    string updateUserData = "UPDATE users SET username = @newname, status = @newstatus, country = @newcountry WHERE username = @uname";
+                    NpgsqlConnection conn = new NpgsqlConnection(_connString);
+                    try {
+                        conn.Open();
+                    }
+                    catch (Exception e) {
+                        Console.WriteLine($"Error {e.Message}");
+                        return HttpStatusCode.InternalServerError;
+                    }
+                    NpgsqlCommand updateCommand = new NpgsqlCommand(updateUserData, conn);
+                    updateCommand.Parameters.AddWithValue("newname", NpgsqlDbType.Varchar, 20, userUpdateData["Username"].ToString());
+                    updateCommand.Parameters.AddWithValue("newstatus", NpgsqlDbType.Varchar, 20, userUpdateData["Status"].ToString());
+                    updateCommand.Parameters.AddWithValue("newcountry", NpgsqlDbType.Varchar, 20, userUpdateData["Country"].ToString());
+                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, pathUsername);
+                    updateCommand.Prepare();
+                    if (updateCommand.ExecuteNonQuery() == 1) {
+                        conn.Close();
+                        return HttpStatusCode.OK;
+                    }
+                    else {
+                        conn.Close();
+                        return HttpStatusCode.InternalServerError;
+                    }
+                }
+                else {
+                    return HttpStatusCode.Unauthorized;
+                }
+                
+            }
+            else {
+                return CheckToken(headerParts);
+            }
         }
 
         #endregion
