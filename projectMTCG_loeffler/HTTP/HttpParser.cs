@@ -267,7 +267,7 @@ namespace projectMTCG_loeffler {
                                     break;
 
                                 case HttpStatusCode.UnprocessableEntity:
-                                    content = "Missing content. Request is missing content or received wrong content type";
+                                    content = "Could not carry out task. Header information missing";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
@@ -338,9 +338,34 @@ namespace projectMTCG_loeffler {
 
                         case "/tradings":               //offer a trading deal
                             status = _dbHandler.CreateTrade(RequestContent, Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Trading deal successfully created";
+                                    break;
+                                
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Could not carry out task. Header information missing ord trade condition impossible";
+                                    break;
+
+                                case HttpStatusCode.BadRequest:
+                                    content = "Could not carry out task. Acquired card must be in the stack in order to trade";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
 
-                        case var namepath when new Regex("^/tradings/[\\w|-]+$").IsMatch(namepath): //accept trading deal (by its id)
+                        case var namepath when new Regex("^/tradings/\\d+$").IsMatch(namepath): //accept trading deal (by its id)
                             status = _dbHandler.AcceptTrade(RequestContent, Headerparts);
                             break;
                     }

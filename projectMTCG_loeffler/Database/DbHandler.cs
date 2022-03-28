@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Npgsql;
 using NpgsqlTypes;
+using projectMTCG_loeffler.cards;
 
 namespace projectMTCG_loeffler.Database {
     public class DbHandler {
@@ -21,6 +22,27 @@ namespace projectMTCG_loeffler.Database {
                 returnStr.Append(hashbytes[i].ToString("x2"));
             }
             return returnStr.ToString();
+        }
+
+
+        private bool ValidateType(string typeCondition) {
+            List<string> cardTypes = new List<string>();
+            cardTypes.Add("Monster");
+            cardTypes.Add("Spell");
+            cardTypes.Add("Goblin");
+            cardTypes.Add("Dragon");
+            cardTypes.Add("Kraken");
+            cardTypes.Add("Wizzard");
+            cardTypes.Add("Knight");
+            cardTypes.Add("FireElve");
+            cardTypes.Add("Ork");
+
+            foreach (string typeName in cardTypes) {
+                if (typeCondition == typeName) {
+                    return true;
+                }
+            }
+            return false;
         }
 
 
@@ -738,7 +760,134 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public HttpStatusCode CreateTrade(string packageJsonString, Dictionary<string, string> headerParts) {
+        public HttpStatusCode CreateTrade(string tradeDetailsJsonString, Dictionary<string, string> headerParts) {
+            //check authorization
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
+            }
+
+            JObject tradeDetails;
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //parse jsonstring
+                    tradeDetails = JObject.Parse(tradeDetailsJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in POST request /transactions/tradings");
+                return HttpStatusCode.UnprocessableEntity;
+            }
+
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            string cardId = tradeDetails["CardId"].ToString();
+            string typeCondition = null;
+            int? minDamage = null;
+            string elementCondition = null;
+
+            if (tradeDetails.ContainsKey("TypeCondition")) {
+                typeCondition = tradeDetails["TypeCondition"].ToString();
+
+                //prevent bad or impossible conditions
+                bool possibleType = ValidateType(typeCondition);
+                if (!possibleType) {
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            if (tradeDetails.ContainsKey("MinDamageCondition")) {
+                minDamage = (int)tradeDetails["MinDamageCondition"];
+
+                //prevent bad or impossible conditions
+                if (minDamage < 0) {
+                    minDamage = 0;
+                }
+            }
+            if (tradeDetails.ContainsKey("ElementCondition")) {
+                elementCondition = tradeDetails["ElementCondition"].ToString();
+
+                //prevent bad or impossible conditions
+                bool possibleElement = false;
+                foreach (Element elem in Enum.GetValues(typeof(Element))) {
+                    if (elem.ToString() == elementCondition) {
+                        possibleElement = true;
+                    }
+                }
+                if (!possibleElement) {
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+
+            JObject cardToTrade = null;
+            JArray userStack = GetCards(headerParts, true);
+            foreach (JObject card in userStack) {
+                if (card["Id"].ToString() == cardId) {
+                    cardToTrade = card;
+                    userStack.Remove(card);
+                    break;
+                }
+            }
+            //if card does not appear in the user's stack the request fails
+            if (cardToTrade == null) {
+                return HttpStatusCode.BadRequest;
+            }
+
+            //first, select user id
+            int userId = 0;
+            string selectUid = "SELECT id FROM users WHERE username = @uname";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+
+            NpgsqlCommand selectCommand = new NpgsqlCommand(selectUid, conn);
+
+            selectCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+
+            selectCommand.Prepare();
+            NpgsqlDataReader queryReader = selectCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                userId = (int)queryReader[0];
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+            queryReader.Close();
+
+            //update the user's card stack which now excludes the traded card
+            string updateStack = "UPDATE users SET cardstack = @newcardstack WHERE username = @uname";
+            NpgsqlCommand updateCommand = new NpgsqlCommand(updateStack, conn);
+            updateCommand.Parameters.AddWithValue("newcardstack", NpgsqlDbType.Jsonb, userStack.ToString());
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+            updateCommand.Prepare();
+            if (updateCommand.ExecuteNonQuery() != 1) {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+
+            //insert trade deal into trading database
+            string insertTrade = "INSERT INTO trades (userid, card, typecond, mindamagecond, elementcond) VALUES (@uid, @card, @typecond, @mindamagecond, @elementcond)";
+            NpgsqlCommand insertCommand = new NpgsqlCommand(insertTrade, conn);
+
+            insertCommand.Parameters.AddWithValue("@uid", NpgsqlDbType.Integer, userId);
+            insertCommand.Parameters.AddWithValue("@card", NpgsqlDbType.Jsonb, cardToTrade.ToString());
+            insertCommand.Parameters.AddWithValue("@typecond", NpgsqlDbType.Varchar, 10, !string.IsNullOrEmpty(typeCondition) ? typeCondition : DBNull.Value);
+            insertCommand.Parameters.AddWithValue("@mindamagecond", NpgsqlDbType.Integer, (minDamage != null) ? minDamage : DBNull.Value);
+            insertCommand.Parameters.AddWithValue("@elementcond", NpgsqlDbType.Varchar, 10, !string.IsNullOrEmpty(elementCondition) ? elementCondition : DBNull.Value);
+
+            insertCommand.Prepare();
+            if (insertCommand.ExecuteNonQuery() != 1) {
+                return HttpStatusCode.InternalServerError;
+            }
             return HttpStatusCode.OK;
         }
 
