@@ -105,7 +105,7 @@ namespace projectMTCG_loeffler.Test {
             Assert.AreEqual(HttpStatusCode.Unauthorized, status);
         }
 
-        public void User_Delete_No_Token_Return_Status_Unauthorized() {
+        public void User_Delete_No_Token_Return_Status_Forbidden() {
             //arrange
             string userjsonstring = "{\"Username\": \"Testuser\"}";
             Dictionary<string, string> headerParts = new Dictionary<string, string>() {
@@ -114,27 +114,6 @@ namespace projectMTCG_loeffler.Test {
                 {"Version", "HTTP/1.1"},
                 {"Host", "localhost:2811"},
                 {"Content-Type", "application/json"},
-                {"Content-Length", "28"}
-            };
-            DbHandler handler = new DbHandler();
-
-            //act
-            HttpStatusCode status = handler.DeleteUser(userjsonstring, headerParts);
-
-            //assert
-            Assert.AreEqual(HttpStatusCode.Unauthorized, status);
-        }
-
-        public void User_Delete_Bad_Token_Return_Status_Forbidden() {
-            //arrange
-            string userjsonstring = "{\"Username\": \"Testuser\"}";
-            Dictionary<string, string> headerParts = new Dictionary<string, string>() {
-                {"Method", "Post"},
-                {"Path", "/sessions"},
-                {"Version", "HTTP/1.1"},
-                {"Host", "localhost:2811"},
-                {"Content-Type", "application/json"},
-                {"Authorization", "Basic testuser-mtcgToken"},
                 {"Content-Length", "28"}
             };
             DbHandler handler = new DbHandler();
@@ -146,6 +125,27 @@ namespace projectMTCG_loeffler.Test {
             Assert.AreEqual(HttpStatusCode.Forbidden, status);
         }
 
+        public void User_Delete_Bad_Token_Return_Status_Forbidden() {
+            //arrange
+            string userjsonstring = "{\"Username\": \"Testuser\"}";
+            Dictionary<string, string> headerParts = new Dictionary<string, string>() {
+                {"Method", "Post"},
+                {"Path", "/sessions"},
+                {"Version", "HTTP/1.1"},
+                {"Host", "localhost:2811"},
+                {"Content-Type", "application/json"},
+                {"Authorization", "Basic VGVzdHVzZXI6cGFzc3dvcmQx"},
+                {"Content-Length", "28"}
+            };
+            DbHandler handler = new DbHandler();
+
+            //act
+            HttpStatusCode status = handler.DeleteUser(userjsonstring, headerParts);
+
+            //assert
+            Assert.AreEqual(HttpStatusCode.Unauthorized, status);
+        }
+
         public void User_Delete_Admin_Token_Return_Status_OK() {
             //arrange
             string userjsonstring = "{\"Username\": \"Testuser\"}";
@@ -155,7 +155,7 @@ namespace projectMTCG_loeffler.Test {
                 {"Version", "HTTP/1.1"},
                 {"Host", "localhost:2811"},
                 {"Content-Type", "application/json"},
-                {"Authorization", "Basic admin-mtcgToken"},
+                {"Authorization", "Basic QWRtaW5pc3RyYXRvcjpzdHJvbmdQYXNzd29yZA=="},
                 {"Content-Length", "28"}
             };
             DbHandler handler = new DbHandler();
@@ -176,7 +176,7 @@ namespace projectMTCG_loeffler.Test {
                 {"Version", "HTTP/1.1"},
                 {"Host", "localhost:2811"},
                 {"Content-Type", "application/json"},
-                {"Authorization", "Basic admin-mtcgToken"},
+                {"Authorization", "Basic QWRtaW5pc3RyYXRvcjpzdHJvbmdQYXNzd29yZA=="},
                 {"Content-Length", "28"}
             };
             DbHandler handler = new DbHandler();
@@ -197,7 +197,7 @@ namespace projectMTCG_loeffler.Test {
             User_Login_Wrong_Username_Return_Status_Unauthorized();
             User_Login_Wrong_Password_Return_Status_Unauthorized();
 
-            User_Delete_No_Token_Return_Status_Unauthorized();
+            User_Delete_No_Token_Return_Status_Forbidden();
             User_Delete_Bad_Token_Return_Status_Forbidden();
             User_Delete_Admin_Token_Return_Status_OK();
             User_Delete_Admin_Token_Return_Status_NotFound();

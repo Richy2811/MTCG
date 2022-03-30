@@ -47,6 +47,9 @@ namespace projectMTCG_loeffler {
             switch (Method) {
                 //depending on the method and returned status (201 for successful registration, 409 for already existing username, etc.) set status and response accordingly
                 //combinations of methods, path, and response codes that are not used result in a "page not found" response
+
+                #region GET requests
+
                 case "GET":
                     switch (Path) {
                         case "/stack":                  //show all cards currently in the stack
@@ -176,10 +179,31 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case "/tradings":               //show trading deals
-                            status = _dbHandler.ShowTrades(RequestContent, Headerparts);
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.ShowTrades(Headerparts);
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
                     }
                     break;
+
+                #endregion
+
+                #region POST requests
 
                 case "POST":
                     switch (Path) {
@@ -352,7 +376,7 @@ namespace projectMTCG_loeffler {
                                     break;
 
                                 case HttpStatusCode.UnprocessableEntity:
-                                    content = "Could not carry out task. Header information missing ord trade condition impossible";
+                                    content = "Could not carry out task. Header information missing or trade condition impossible";
                                     break;
 
                                 case HttpStatusCode.BadRequest:
@@ -366,10 +390,39 @@ namespace projectMTCG_loeffler {
                             break;
 
                         case var namepath when new Regex("^/tradings/\\d+$").IsMatch(namepath): //accept trading deal (by its id)
-                            status = _dbHandler.AcceptTrade(RequestContent, Headerparts);
+                            status = _dbHandler.AcceptTrade(RequestContent, Headerparts, Path);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Trading deal accepted. Cards successfully traded";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Could not carry out task. Header information missing";
+                                    break;
+
+                                case HttpStatusCode.BadRequest:
+                                    content = "Could not carry out task. Acquired card must be in the stack and has to fulfill all trading conditions and rules";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
                             break;
                     }
                     break;
+
+                #endregion
+
+                #region PUT requests
 
                 case "PUT":
                     switch (Path) {
@@ -429,6 +482,10 @@ namespace projectMTCG_loeffler {
                     }
                     break;
 
+                #endregion
+
+                #region DELETE requests
+
                 case "DELETE":
                     switch (Path) {
                         case "/users":                  //delete user request (can only be done by admin through the admin token)
@@ -451,7 +508,7 @@ namespace projectMTCG_loeffler {
                             status = _dbHandler.DeleteUser(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
-                                    content = "Deletion successful. Resource successfully deleted";
+                                    content = "Deletion successful. User successfully deleted";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
@@ -476,11 +533,38 @@ namespace projectMTCG_loeffler {
                             }
                             break;
 
-                        case var namepath when new Regex("^/tradings/[\\w|-]+$").IsMatch(namepath): //delete trading deal (by its id)
-                            status = _dbHandler.DeleteTrade(RequestContent, Headerparts);
+                        case var namepath when new Regex("^/tradings/\\d+$").IsMatch(namepath): //delete trading deal (by its id)
+                            status = _dbHandler.DeleteTrade(Headerparts, Path);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Deletion successful. Trade successfully deleted";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Missing content. Request is missing content or received wrong content type";
+                                    break;
+
+                                case HttpStatusCode.NotFound:
+                                    content = "Error. Trade could not be found. Deletion failed";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error. An internal server error occurred when attempting to carry out the request";
+                                    break;
+                            }
                             break;
                     }
                     break;
+
+                #endregion
             }
 
             Console.WriteLine();

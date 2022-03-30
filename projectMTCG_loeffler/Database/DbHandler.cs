@@ -169,7 +169,7 @@ namespace projectMTCG_loeffler.Database {
             decimal winningPlayerElo = 0, losingPlayerElo = 0;
 
             int kValue = 20;
-            
+
             string selectStats = "SELECT wins, losses, elo FROM users WHERE username = @uname";
             NpgsqlConnection conn = new NpgsqlConnection(_connString);
             try {
@@ -215,7 +215,7 @@ namespace projectMTCG_loeffler.Database {
 
             //calculate expected result change of winning player
             float expectedResult = 1 / (1 + MathF.Pow(10, ((float)winningPlayerElo - (float)losingPlayerElo) / 400));
-            
+
             Console.WriteLine($"Expected: {expectedResult}");
 
             //calculate final result of both players
@@ -247,7 +247,7 @@ namespace projectMTCG_loeffler.Database {
             updateCommand.Parameters.AddWithValue("newelo", NpgsqlDbType.Numeric, (decimal)losingPlayerFinalElo);
             updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, loser);
             updateCommand.Prepare();
-            
+
             if (updateCommand.ExecuteNonQuery() != 1) {
                 Console.Error.WriteLine("Something went wrong when updating player statistics");
                 conn.Close();
@@ -256,11 +256,7 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        #region GET Requests
-
-        public JArray GetCards(Dictionary<string, string> headerParts, bool getStack) {
-            string username = BasicAuthGetUsername(headerParts["Authorization"]);
-
+        private JArray GetCardsByUsername(string username, bool getStack) {
             JArray cardStack = JArray.Parse("[]");
 
             string selectStack;
@@ -292,6 +288,49 @@ namespace projectMTCG_loeffler.Database {
                 conn.Close();
                 return null;
             }
+        }
+
+
+        private JArray GetCardsById(int userId, bool getStack) {
+            JArray cardStack = JArray.Parse("[]");
+
+            string selectStack;
+            //if flag is set to true then return stack of user; else return deck of user
+            selectStack = getStack ? "SELECT cardstack FROM users WHERE id = @uid" : "SELECT carddeck FROM users WHERE id = @uid";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                //return null if an error occured
+                return null;
+            }
+
+            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
+            selectStackCommand.Parameters.AddWithValue("uid", NpgsqlDbType.Integer, userId);
+            selectStackCommand.Prepare();
+            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
+            if (queryreader.Read()) {   //there should only be one result
+                if (!DBNull.Value.Equals(queryreader[0])) {
+                    cardStack = JArray.Parse(queryreader[0].ToString());
+                }
+                conn.Close();
+                return cardStack;
+            }
+            else {
+                conn.Close();
+                return null;
+            }
+        }
+
+
+        #region GET Requests
+
+        public JArray GetCards(Dictionary<string, string> headerParts, bool getStack) {
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            return GetCardsByUsername(username, getStack);
         }
 
 
@@ -414,7 +453,7 @@ namespace projectMTCG_loeffler.Database {
                 float winLoseRatio = (float)(int)queryreader[1] / ((float)(int)queryreader[1] + (float)(int)queryreader[2]);
                 //read into jobject to return indented json format
                 JObject userStats = JObject.Parse($"{{Username: \"{username}\", Coins: {queryreader[0]}, Wins: {queryreader[1]}, Losses: {queryreader[2]}, \"Win/Lose Ratio\": {winLoseRatio.ToString(format)}, ELO: {elo.ToString(format)}}}");
-                
+
                 conn.Close();
                 return userStats.ToString();
             }
@@ -460,8 +499,32 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public HttpStatusCode ShowTrades(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+        public string ShowTrades(Dictionary<string, string> headerParts) {
+            string selectTrades = "SELECT id, card, typecond, mindamagecond, elementcond FROM trades";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return "Error";
+            }
+            NpgsqlCommand selectScoresCommand = new NpgsqlCommand(selectTrades, conn);
+            NpgsqlDataReader queryreader = selectScoresCommand.ExecuteReader();
+
+            JArray tradeData = JArray.Parse("[]");
+            JObject tmpData;
+            JObject tmpCard;
+            if (!queryreader.HasRows) {
+                return "There are currently no trade offers";
+            }
+            while (queryreader.Read()) {
+                tmpCard = JObject.Parse(queryreader[1].ToString());
+                tmpData = JObject.Parse($"{{Id: {queryreader[0]}, Card: {tmpCard}, TypeCondition: \"{queryreader[2]}\", MinDamageCondition: {queryreader[3]}, ElementCondition: \"{queryreader[4]}\"}}");
+                tradeData.Add(tmpData);
+            }
+
+            return tradeData.ToString();
         }
 
         #endregion
@@ -555,15 +618,11 @@ namespace projectMTCG_loeffler.Database {
 
         public HttpStatusCode AddPackage(string packageJsonString, Dictionary<string, string> headerParts) {
             //check admin token
-            if (headerParts.ContainsKey("Authorization")) {
-                string username = BasicAuthGetUsername(headerParts["Authorization"]);
-                string password = BasicAuthGetPassword(headerParts["Authorization"]);
-
-                if (VerifyPassword(username, password) != HttpStatusCode.OK) {
-                    return HttpStatusCode.Forbidden;
-                }
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
             }
-            else {
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            if (username != "Administrator") {
                 return HttpStatusCode.Unauthorized;
             }
 
@@ -620,8 +679,9 @@ namespace projectMTCG_loeffler.Database {
 
 
         public HttpStatusCode AquirePackage(string packageJsonString, Dictionary<string, string> headerParts) {
-            if (!headerParts.ContainsKey("Authorization")) {
-                return HttpStatusCode.Forbidden;
+            //check token
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
             }
             JObject wantedPackId;
 
@@ -644,118 +704,113 @@ namespace projectMTCG_loeffler.Database {
             string username = BasicAuthGetUsername(headerParts["Authorization"]);
             string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-            if (VerifyPassword(username, password) == HttpStatusCode.OK) {
-                //token ok, add package with given id in json string if coins are sufficient
-                int coins = 0;
-                int price = Int32.MaxValue;
-                JArray userStack = null;
-                JArray cardPackage = null;
-                bool nullStack = false;
+            //token ok, add package with given id in json string if coins are sufficient
+            int coins = 0;
+            int price = Int32.MaxValue;
+            JArray userStack = null;
+            JArray cardPackage = null;
+            bool nullStack = false;
 
-                string selectUser = "SELECT coins, cardstack FROM users WHERE username = @uname";
-                string selectPackage = "SELECT cardpackage, price FROM market WHERE id = @id";
-                NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            string selectUser = "SELECT coins, cardstack FROM users WHERE username = @uname";
+            string selectPackage = "SELECT cardpackage, price FROM market WHERE id = @id";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+
+            NpgsqlCommand coinsCommand = new NpgsqlCommand(selectUser, conn);
+            NpgsqlCommand packageCommand = new NpgsqlCommand(selectPackage, conn);
+
+            coinsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+            packageCommand.Parameters.AddWithValue("id", NpgsqlDbType.Integer, wantedPackId["Id"].Value<int>());
+
+            coinsCommand.Prepare();
+            packageCommand.Prepare();
+
+            NpgsqlDataReader queryreader = coinsCommand.ExecuteReader();
+            if (queryreader.Read()) {
+                //first result is number of coins the user has
+                coins = (int)queryreader[0];
+                //second relult is the cardstack of the user -> check if column result is null
+                if (!DBNull.Value.Equals(queryreader[1])) {
+                    //user already has cards -> parse user stack and add cardpack to existing stack; set flag to signify existing stack
+                    userStack = JArray.Parse(queryreader[1].ToString());
+                    nullStack = false;
+                }
+                else {
+                    //user has no cards yet -> insert cards directly into stack; setting flag to signify empty stack
+                    nullStack = true;
+                }
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+
+            queryreader.Close();
+            queryreader = packageCommand.ExecuteReader();
+            if (queryreader.Read()) {
+                cardPackage = JArray.Parse(queryreader[0].ToString());
+                price = (int)queryreader[1];
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.Gone;
+            }
+            queryreader.Close();
+            //handle coins, price and cardpackage
+            if ((coins - price) >= 0) {
+                //user has enough coins to buy package -> update user coin value -> add cards to their stack
+                if (!nullStack) {
+                    //add cards from package to userstack
+                    foreach (JToken card in cardPackage) {
+                        userStack.Add(card);
+                    }
+                }
+                else {
+                    //assign package to userstack directly
+                    userStack = cardPackage;
+                }
+
+                string removeFromMarket = "DELETE FROM market WHERE id = @removeid";
+                NpgsqlCommand deleteCommand = new NpgsqlCommand(removeFromMarket, conn);
+                deleteCommand.Parameters.AddWithValue("removeid", NpgsqlDbType.Integer, wantedPackId["Id"].Value<int>());
+                deleteCommand.Prepare();
+
+                string updateCoins = "UPDATE users SET coins = @newcoins, cardstack = @newcardstack WHERE username = @uname";
+                NpgsqlCommand updateCommand = new NpgsqlCommand(updateCoins, conn);
+                updateCommand.Parameters.AddWithValue("newcoins", NpgsqlDbType.Integer, coins - price);
+                updateCommand.Parameters.AddWithValue("newcardstack", NpgsqlDbType.Jsonb, userStack.ToString());
+                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+                updateCommand.Prepare();
+
                 try {
-                    conn.Open();
-                }
-                catch (Exception e) {
-                    Console.WriteLine($"Error {e.Message}");
-                    return HttpStatusCode.InternalServerError;
-                }
-
-                NpgsqlCommand coinsCommand = new NpgsqlCommand(selectUser, conn);
-                NpgsqlCommand packageCommand = new NpgsqlCommand(selectPackage, conn);
-
-                coinsCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
-                packageCommand.Parameters.AddWithValue("id", NpgsqlDbType.Integer, wantedPackId["Id"].Value<int>());
-
-                coinsCommand.Prepare();
-                packageCommand.Prepare();
-
-                NpgsqlDataReader queryreader = coinsCommand.ExecuteReader();
-                if (queryreader.Read()) {
-                    //first result is number of coins the user has
-                    coins = (int)queryreader[0];
-                    //second relult is the cardstack of the user -> check if column result is null
-                    if (!DBNull.Value.Equals(queryreader[1])) {
-                        //user already has cards -> parse user stack and add cardpack to existing stack; set flag to signify existing stack
-                        userStack = JArray.Parse(queryreader[1].ToString());
-                        nullStack = false;
+                    //if one row of each table was affected the update was successful
+                    if ((updateCommand.ExecuteNonQuery() == 1) && (deleteCommand.ExecuteNonQuery() == 1)) {
+                        Console.WriteLine("Package successfully acquired");
+                        conn.Close();
+                        return HttpStatusCode.OK;
                     }
                     else {
-                        //user has no cards yet -> insert cards directly into stack; setting flag to signify empty stack
-                        nullStack = true;
-                    }
-                }
-                else {
-                    conn.Close();
-                    return HttpStatusCode.InternalServerError;
-                }
-
-                queryreader.Close();
-                queryreader = packageCommand.ExecuteReader();
-                if (queryreader.Read()) {
-                    cardPackage = JArray.Parse(queryreader[0].ToString());
-                    price = (int)queryreader[1];
-                }
-                else {
-                    conn.Close();
-                    return HttpStatusCode.Gone;
-                }
-                queryreader.Close();
-                //handle coins, price and cardpackage
-                if ((coins - price) >= 0) {
-                    //user has enough coins to buy package -> update user coin value -> add cards to their stack
-                    if (!nullStack) {
-                        //add cards from package to userstack
-                        foreach (JToken card in cardPackage) {
-                            userStack.Add(card);
-                        }
-                    }
-                    else {
-                        //assign package to userstack directly
-                        userStack = cardPackage;
-                    }
-
-                    string removeFromMarket = "DELETE FROM market WHERE id = @removeid";
-                    NpgsqlCommand deleteCommand = new NpgsqlCommand(removeFromMarket, conn);
-                    deleteCommand.Parameters.AddWithValue("removeid", NpgsqlDbType.Integer, wantedPackId["Id"].Value<int>());
-                    deleteCommand.Prepare();
-
-                    string updateCoins = "UPDATE users SET coins = @newcoins, cardstack = @newcardstack WHERE username = @uname";
-                    NpgsqlCommand updateCommand = new NpgsqlCommand(updateCoins, conn);
-                    updateCommand.Parameters.AddWithValue("newcoins", NpgsqlDbType.Integer, coins - price);
-                    updateCommand.Parameters.AddWithValue("newcardstack", NpgsqlDbType.Jsonb, userStack.ToString());
-                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
-                    updateCommand.Prepare();
-
-                    try {
-                        //if one row of each table was affected the update was successful
-                        if ((updateCommand.ExecuteNonQuery() == 1) && (deleteCommand.ExecuteNonQuery() == 1)) {
-                            Console.WriteLine("Package successfully acquired");
-                            conn.Close();
-                            return HttpStatusCode.OK;
-                        }
-                        else {
-                            Console.WriteLine("Error, something went wrong when updating database");
-                            conn.Close();
-                            return HttpStatusCode.InternalServerError;
-                        }
-                    }
-                    catch (NpgsqlException e) {
-                        Console.Error.WriteLine($"Error {e.Message}");
+                        Console.WriteLine("Error, something went wrong when updating database");
                         conn.Close();
                         return HttpStatusCode.InternalServerError;
                     }
                 }
-                else {
-                    //not enough coins
+                catch (NpgsqlException e) {
+                    Console.Error.WriteLine($"Error {e.Message}");
                     conn.Close();
-                    return HttpStatusCode.BadRequest;
+                    return HttpStatusCode.InternalServerError;
                 }
             }
             else {
-                return VerifyPassword(username, password);
+                //not enough coins
+                conn.Close();
+                return HttpStatusCode.BadRequest;
             }
         }
 
@@ -779,7 +834,7 @@ namespace projectMTCG_loeffler.Database {
                 }
             }
             else {
-                Console.Error.WriteLine("Missing content in POST request /transactions/tradings");
+                Console.Error.WriteLine("Missing content in POST request /tradings");
                 return HttpStatusCode.UnprocessableEntity;
             }
 
@@ -849,9 +904,7 @@ namespace projectMTCG_loeffler.Database {
             }
 
             NpgsqlCommand selectCommand = new NpgsqlCommand(selectUid, conn);
-
             selectCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
-
             selectCommand.Prepare();
             NpgsqlDataReader queryReader = selectCommand.ExecuteReader();
             if (queryReader.Read()) {
@@ -892,7 +945,173 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public HttpStatusCode AcceptTrade(string packageJsonString, Dictionary<string, string> headerParts) {
+        public HttpStatusCode AcceptTrade(string ownedCardJsonString, Dictionary<string, string> headerParts, string path) {
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
+            }
+
+            int pathTradeId = int.Parse(path.Split("/tradings/")[1]);
+            JObject ownedCardIdJson;
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //parse jsonstring
+                    ownedCardIdJson = JObject.Parse(ownedCardJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            else {
+                Console.Error.WriteLine($"Missing content in POST request {path}");
+                return HttpStatusCode.UnprocessableEntity;
+            }
+
+            string acceptingUsername = BasicAuthGetUsername(headerParts["Authorization"]);
+            //offeredCard will store the card that is currently stored in the trade database
+            JObject offeredCard = null;
+            int offeringUserId = 0;
+            string typeCondition = null;
+            int? minDamageCondition = null;
+            string elementCondition = null;
+
+            //check if the user has the card in their stack
+            JObject cardToTrade = null;
+            JArray userStack = GetCards(headerParts, true);
+            foreach (JObject card in userStack) {
+                if (card["Id"].ToString() == ownedCardIdJson["Id"].ToString()) {
+                    cardToTrade = card;
+                    userStack.Remove(card);
+                    break;
+                }
+            }
+            //if card does not appear in the user's stack the request fails
+            if (cardToTrade == null) {
+                return HttpStatusCode.BadRequest;
+            }
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+
+            //get id from accepting user to ensure they can not trade with themselves
+            int acceptingUid = 0;
+            string selectAcceptingUid = "SELECT id FROM users WHERE username = @uname";
+            NpgsqlCommand selectAcceptIdCommand = new NpgsqlCommand(selectAcceptingUid, conn);
+            selectAcceptIdCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, acceptingUsername);
+            selectAcceptIdCommand.Prepare();
+
+            NpgsqlDataReader queryReader = selectAcceptIdCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                acceptingUid = (int)queryReader[0];
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+            queryReader.Close();
+
+
+            string selectTrade = "SELECT userid, card, typecond, mindamagecond, elementcond FROM trades WHERE id = @tradeid";
+            NpgsqlCommand selectTradesCommand = new NpgsqlCommand(selectTrade, conn);
+            selectTradesCommand.Parameters.AddWithValue("tradeid", NpgsqlDbType.Integer, pathTradeId);
+            selectTradesCommand.Prepare();
+
+            queryReader = selectTradesCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                offeringUserId = (int)queryReader[0];
+                offeredCard = JObject.Parse(queryReader[1].ToString());
+                //keep condition null if it is not set
+                typeCondition = DBNull.Value.Equals(queryReader[2]) ? null : queryReader[2].ToString();
+                minDamageCondition = DBNull.Value.Equals(queryReader[3]) ? null : (int)queryReader[3];
+                elementCondition = DBNull.Value.Equals(queryReader[4]) ? null : queryReader[4].ToString();
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+            queryReader.Close();
+
+            //check if user tries to trade with themselves
+            if (acceptingUid == offeringUserId) {
+                conn.Close();
+                return HttpStatusCode.BadRequest;
+            }
+
+            //check if conditions are met
+            if (typeCondition != null) {
+                if (typeCondition == "Monster") {
+                    if (cardToTrade["Type"].ToString() == "Spell") {
+                        conn.Close();
+                        return HttpStatusCode.BadRequest;
+                    }
+                }
+                else if (cardToTrade["Type"].ToString() != typeCondition) {
+                    conn.Close();
+                    return HttpStatusCode.BadRequest;
+                }
+            }
+            if (minDamageCondition != null) {
+                if ((int)cardToTrade["Damage"] < minDamageCondition) {
+                    conn.Close();
+                    return HttpStatusCode.BadRequest;
+                }
+            }
+            if (elementCondition != null) {
+                if (cardToTrade["Element"].ToString() != elementCondition) {
+                    conn.Close();
+                    return HttpStatusCode.BadRequest;
+                }
+            }
+
+            //all conditions met -> trade can occur
+            JArray offeringUserCards = GetCardsById(offeringUserId, true);
+            //offering user gets the trading card from the user who accepted the trade
+            offeringUserCards.Add(cardToTrade);
+            //accepting user gets trading card which was offered
+            userStack.Add(offeredCard);
+
+            //delete trade entry from database
+            string deleteTrade = "DELETE FROM trades WHERE id = @tradeid";
+            NpgsqlCommand deleteCommand = new NpgsqlCommand(deleteTrade, conn);
+            deleteCommand.Parameters.AddWithValue("tradeid", NpgsqlDbType.Integer, pathTradeId);
+            deleteCommand.Prepare();
+
+            if (deleteCommand.ExecuteNonQuery() != 1) {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+
+            //update offering user's card stack
+            string updateOfferingUserStack = "UPDATE users SET cardstack = @newstack WHERE id = @uid";
+            NpgsqlCommand updateOfferStackCommand = new NpgsqlCommand(updateOfferingUserStack, conn);
+            updateOfferStackCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, offeringUserCards.ToString());
+            updateOfferStackCommand.Parameters.AddWithValue("uid", NpgsqlDbType.Integer, offeringUserId);
+            updateOfferStackCommand.Prepare();
+
+            if (updateOfferStackCommand.ExecuteNonQuery() != 1) {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+
+            //update accepting user's card stack
+            string updateAcceptingUserStack = "UPDATE users SET cardstack = @newstack WHERE username = @uname";
+            NpgsqlCommand updateAcceptStackCommand = new NpgsqlCommand(updateAcceptingUserStack, conn);
+            updateAcceptStackCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userStack.ToString());
+            updateAcceptStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, acceptingUsername);
+            updateAcceptStackCommand.Prepare();
+
+            if (updateAcceptStackCommand.ExecuteNonQuery() != 1) {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+            conn.Close();
             return HttpStatusCode.OK;
         }
 
@@ -901,8 +1120,9 @@ namespace projectMTCG_loeffler.Database {
         #region PUT requests
 
         public HttpStatusCode ConfigDeck(string idJsonString, Dictionary<string, string> headerParts) {
-            if (!headerParts.ContainsKey("Authorization")) {
-                return HttpStatusCode.Forbidden;
+            //check user token
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
             }
             JArray idArray;
             //check if header contains json content
@@ -925,31 +1145,79 @@ namespace projectMTCG_loeffler.Database {
             }
 
             string username = BasicAuthGetUsername(headerParts["Authorization"]);
-            string password = BasicAuthGetPassword(headerParts["Authorization"]);
 
-            if (VerifyPassword(username, password) == HttpStatusCode.OK) {
-                JArray userStack = GetCards(headerParts, true);
-                JArray userDeck = GetCards(headerParts, false);
-                //first put all cards from the deck back into the stack
-                foreach (JToken card in userDeck) {
-                    userStack.Add(card);
-                }
-                userDeck.Clear();
-                //then search for given id's
-                foreach (JToken id in idArray) {
-                    foreach (JObject card in userStack) {
-                        if (card.GetValue("Id").ToString() == id.ToString()) {
-                            userDeck.Add(card);
-                            userStack.Remove(card);
-                            break;
-                        }
+            JArray userStack = GetCards(headerParts, true);
+            JArray userDeck = GetCards(headerParts, false);
+            //first put all cards from the deck back into the stack
+            foreach (JToken card in userDeck) {
+                userStack.Add(card);
+            }
+            userDeck.Clear();
+            //then search for given id's
+            foreach (JToken id in idArray) {
+                foreach (JObject card in userStack) {
+                    if (card.GetValue("Id").ToString() == id.ToString()) {
+                        userDeck.Add(card);
+                        userStack.Remove(card);
+                        break;
                     }
                 }
-                if (userDeck.Count != 4) {
-                    return HttpStatusCode.BadRequest;
-                }
+            }
+            if (userDeck.Count != 4) {
+                return HttpStatusCode.BadRequest;
+            }
 
-                string updateStackAndDeck = "UPDATE users SET cardstack = @newstack, carddeck = @newdeck WHERE username = @uname";
+            string updateStackAndDeck = "UPDATE users SET cardstack = @newstack, carddeck = @newdeck WHERE username = @uname";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+            NpgsqlCommand updateCommand = new NpgsqlCommand(updateStackAndDeck, conn);
+            updateCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userStack.ToString());
+            updateCommand.Parameters.AddWithValue("newdeck", NpgsqlDbType.Jsonb, userDeck.ToString());
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+            updateCommand.Prepare();
+            if (updateCommand.ExecuteNonQuery() == 1) {
+                conn.Close();
+                return HttpStatusCode.OK;
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+        }
+
+        public HttpStatusCode EditUser(string userUpdateJsonString, Dictionary<string, string> headerParts, string path) {
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
+            }
+
+            string pathUsername = path.Split("/users/")[1];
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            JObject userUpdateData;
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //parse jsonstring
+                    userUpdateData = JObject.Parse(userUpdateJsonString);
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            else {
+                Console.Error.WriteLine($"Missing content in PUT request {path}");
+                return HttpStatusCode.UnprocessableEntity;
+            }
+
+            //check if the user actually tries to edit their own user data
+            if (pathUsername == username) {
+                string updateUserData = "UPDATE users SET username = @newname, status = @newstatus, country = @newcountry WHERE username = @uname";
                 NpgsqlConnection conn = new NpgsqlConnection(_connString);
                 try {
                     conn.Open();
@@ -958,10 +1226,11 @@ namespace projectMTCG_loeffler.Database {
                     Console.WriteLine($"Error {e.Message}");
                     return HttpStatusCode.InternalServerError;
                 }
-                NpgsqlCommand updateCommand = new NpgsqlCommand(updateStackAndDeck, conn);
-                updateCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userStack.ToString());
-                updateCommand.Parameters.AddWithValue("newdeck", NpgsqlDbType.Jsonb, userDeck.ToString());
-                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+                NpgsqlCommand updateCommand = new NpgsqlCommand(updateUserData, conn);
+                updateCommand.Parameters.AddWithValue("newname", NpgsqlDbType.Varchar, 20, userUpdateData["Username"].ToString());
+                updateCommand.Parameters.AddWithValue("newstatus", NpgsqlDbType.Varchar, 20, userUpdateData["Status"].ToString());
+                updateCommand.Parameters.AddWithValue("newcountry", NpgsqlDbType.Varchar, 20, userUpdateData["Country"].ToString());
+                updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, pathUsername);
                 updateCommand.Prepare();
                 if (updateCommand.ExecuteNonQuery() == 1) {
                     conn.Close();
@@ -973,64 +1242,7 @@ namespace projectMTCG_loeffler.Database {
                 }
             }
             else {
-                return VerifyPassword(username, password);
-            }
-        }
-
-        public HttpStatusCode EditUser(string userUpdateJsonString, Dictionary<string, string> headerParts, string path) {
-            if (CheckToken(headerParts) == HttpStatusCode.OK) {
-                string pathUsername = path.Split("/users/")[1];
-                string username = BasicAuthGetUsername(headerParts["Authorization"]);
-                JObject userUpdateData;
-                //check if header contains json content
-                if (headerParts.ContainsKey("Content-Type")) {
-                    if (headerParts["Content-Type"] == "application/json") {
-                        //parse jsonstring
-                        userUpdateData = JObject.Parse(userUpdateJsonString);
-                    }
-                    else {
-                        Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
-                        return HttpStatusCode.UnprocessableEntity;
-                    }
-                }
-                else {
-                    Console.Error.WriteLine($"Missing content in PUT request {path}");
-                    return HttpStatusCode.UnprocessableEntity;
-                }
-
-                //check if the user actually tries to edit their own user data
-                if (pathUsername == username) {
-                    string updateUserData = "UPDATE users SET username = @newname, status = @newstatus, country = @newcountry WHERE username = @uname";
-                    NpgsqlConnection conn = new NpgsqlConnection(_connString);
-                    try {
-                        conn.Open();
-                    }
-                    catch (Exception e) {
-                        Console.WriteLine($"Error {e.Message}");
-                        return HttpStatusCode.InternalServerError;
-                    }
-                    NpgsqlCommand updateCommand = new NpgsqlCommand(updateUserData, conn);
-                    updateCommand.Parameters.AddWithValue("newname", NpgsqlDbType.Varchar, 20, userUpdateData["Username"].ToString());
-                    updateCommand.Parameters.AddWithValue("newstatus", NpgsqlDbType.Varchar, 20, userUpdateData["Status"].ToString());
-                    updateCommand.Parameters.AddWithValue("newcountry", NpgsqlDbType.Varchar, 20, userUpdateData["Country"].ToString());
-                    updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, pathUsername);
-                    updateCommand.Prepare();
-                    if (updateCommand.ExecuteNonQuery() == 1) {
-                        conn.Close();
-                        return HttpStatusCode.OK;
-                    }
-                    else {
-                        conn.Close();
-                        return HttpStatusCode.InternalServerError;
-                    }
-                }
-                else {
-                    return HttpStatusCode.Unauthorized;
-                }
-                
-            }
-            else {
-                return CheckToken(headerParts);
+                return HttpStatusCode.Unauthorized;
             }
         }
 
@@ -1040,15 +1252,11 @@ namespace projectMTCG_loeffler.Database {
 
         public HttpStatusCode DeleteUser(string userJsonString, Dictionary<string, string> headerParts) {
             //check admin token
-            if (headerParts.ContainsKey("Authorization")) {
-                string username = BasicAuthGetUsername(headerParts["Authorization"]);
-                string password = BasicAuthGetPassword(headerParts["Authorization"]);
-
-                if (VerifyPassword(username, password) != HttpStatusCode.OK) {
-                    return HttpStatusCode.Forbidden;
-                }
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
             }
-            else {
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            if (username != "Administrator") {
                 return HttpStatusCode.Unauthorized;
             }
 
@@ -1082,11 +1290,8 @@ namespace projectMTCG_loeffler.Database {
                 Console.WriteLine($"Error {e.Message}");
                 return HttpStatusCode.InternalServerError;
             }
-
             NpgsqlCommand command = new NpgsqlCommand(deleteUser, conn);
-
             command.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, userObject["Username"].ToString());
-
             command.Prepare();
 
             try {
@@ -1109,8 +1314,67 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public HttpStatusCode DeleteTrade(string userJsonString, Dictionary<string, string> headerParts) {
-            return HttpStatusCode.OK;
+        public HttpStatusCode DeleteTrade(Dictionary<string, string> headerParts, string path) {
+            //check user token
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
+            }
+
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            int tradeId = int.Parse(path.Split("/tradings/")[1]);
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+
+            JArray userCards = GetCards(headerParts, true);
+            //give card back to user
+            string selectCard = "SELECT card FROM trades WHERE id = @tradeid";
+            NpgsqlCommand selectCommand = new NpgsqlCommand(selectCard, conn);
+            selectCommand.Parameters.AddWithValue("tradeid", NpgsqlDbType.Integer, tradeId);
+            selectCommand.Prepare();
+
+            NpgsqlDataReader queryReader = selectCommand.ExecuteReader();
+            if (queryReader.Read()) {
+                JObject tradeCard = JObject.Parse(queryReader[0].ToString());
+                userCards.Add(tradeCard);
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+            queryReader.Close();
+
+
+            string updateStack = "UPDATE users SET cardstack = @newstack WHERE username = @uname";
+            NpgsqlCommand updateCommand = new NpgsqlCommand(updateStack, conn);
+            updateCommand.Parameters.AddWithValue("newstack", NpgsqlDbType.Jsonb, userCards.ToString());
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+            updateCommand.Prepare();
+            if (updateCommand.ExecuteNonQuery() != 1) {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
+
+
+            string deleteTrade = "DELETE FROM trades WHERE id = @tradeid";
+            NpgsqlCommand deleteCommand = new NpgsqlCommand(deleteTrade, conn);
+            deleteCommand.Parameters.AddWithValue("tradeid", NpgsqlDbType.Integer, tradeId);
+            deleteCommand.Prepare();
+
+            if (deleteCommand.ExecuteNonQuery() == 1) {
+                conn.Close();
+                return HttpStatusCode.OK;
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.InternalServerError;
+            }
         }
 
         #endregion
