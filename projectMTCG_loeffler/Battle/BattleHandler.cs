@@ -20,6 +20,8 @@ namespace projectMTCG_loeffler.Battle {
         private DbHandler _dbHandler;
         private StringBuilder _battleLog = new StringBuilder();
 
+        private bool errFlag = false;   //error flag in case of thrown exceptions
+
         private void JarrayExtractCards(JArray playerOneCards, JArray playerTwoCards) {
             if ((playerOneCards == null) || (playerTwoCards == null)) {
                 return;
@@ -270,17 +272,17 @@ namespace projectMTCG_loeffler.Battle {
 
         public int GetWinner() {
             //return winner (1 => player one, 2 => player two, 0 => draw, -1 => error)
-            if (_playerTwoCards.Count < _playerOneCards.Count) {
+            if (errFlag) {
+                return -1;
+            }
+            else if (_playerTwoCards.Count < _playerOneCards.Count) {
                 return 1;
             }
             else if (_playerOneCards.Count < _playerTwoCards.Count) {
                 return 2;
             }
-            else if (_playerOneCards.Count == _playerTwoCards.Count) {
-                return 0;
-            }
             else {
-                return -1;
+                return 0;   //number of cards of both players equal
             }
         }
 
@@ -302,6 +304,7 @@ namespace projectMTCG_loeffler.Battle {
                 return "The battle could not be carried out. Every player has to have cards in their deck";
             }
             else if ((_playerOneCards.Count != 4) || (_playerTwoCards.Count != 4)) {
+                errFlag = true;
                 throw new Exception("Number of cards in player cards list does not match expected number of cards");
             }
 
