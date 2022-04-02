@@ -21,6 +21,7 @@ namespace projectMTCG_loeffler.Battle {
         private StringBuilder _battleLog = new StringBuilder();
 
         private bool errFlag = false;   //error flag in case of thrown exceptions
+        private const ushort _winnerCoinReward = 3;
 
         private void JarrayExtractCards(JArray playerOneCards, JArray playerTwoCards) {
             if ((playerOneCards == null) || (playerTwoCards == null)) {
@@ -318,6 +319,14 @@ namespace projectMTCG_loeffler.Battle {
                 if (round != 1) {
                     _battleLog.AppendLine();
                 }
+
+                if (round == 1) {
+                    _battleLog.AppendLine($"Player {_challengerName} challenges player {_opponentName} to a duel.");
+                    _battleLog.AppendLine("-----------------------");
+                    _battleLog.AppendLine("|The battle starts now|");
+                    _battleLog.AppendLine("-----------------------");
+                }
+
                 _battleLog.AppendLine($"Player {_challengerName} remaining cards: {_playerOneCards.Count} | Player {_opponentName} remaining cards: {_playerTwoCards.Count}");
 
                 _indexP1 = _rng.Next(0, _playerOneCards.Count);
@@ -398,7 +407,6 @@ namespace projectMTCG_loeffler.Battle {
             string winnerTmpStr;
             string loserTmpStr;
             
-
             switch (GetWinner()) {
                 case 1:
                     _battleLog.AppendLine($"{_opponentName} has no more cards to battle with. {_challengerName} wins");
@@ -412,6 +420,8 @@ namespace projectMTCG_loeffler.Battle {
 
                         _battleLog.AppendLine(winnerTmpStr + _dbHandler.GetEloRating(_challengerName));
                         _battleLog.AppendLine(loserTmpStr + _dbHandler.GetEloRating(_opponentName));
+
+                        _battleLog.AppendLine(_dbHandler.GiveCoins(_challengerName, _winnerCoinReward));
                     }
                     catch (Exception e) {
                         Console.Error.WriteLine(e.Message);
@@ -431,6 +441,8 @@ namespace projectMTCG_loeffler.Battle {
 
                         _battleLog.AppendLine(winnerTmpStr + _dbHandler.GetEloRating(_opponentName));
                         _battleLog.AppendLine(loserTmpStr + _dbHandler.GetEloRating(_challengerName));
+
+                        _battleLog.AppendLine(_dbHandler.GiveCoins(_opponentName, _winnerCoinReward));
                     }
                     catch (Exception e) {
                         Console.Error.WriteLine(e.Message);
@@ -443,7 +455,7 @@ namespace projectMTCG_loeffler.Battle {
                     break;
 
                 case -1:
-                    //can not occur
+                    //only occurs when error flag is set
                     Console.Error.WriteLine("An error occurred. GetWinner() returned unexpected value");
                     break;
             }

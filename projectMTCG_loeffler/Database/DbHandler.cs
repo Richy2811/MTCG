@@ -15,6 +15,7 @@ namespace projectMTCG_loeffler.Database {
         private const string _connString = "Server=127.0.0.1; Port=5432; User Id=richy; Password=1234; Database=mtcgdb";
         private string _resultString;   //used to save a query result into a string
 
+        #region private methods
 
         private string BytesToHex(byte[] hashbytes) {
             StringBuilder returnStr = new StringBuilder(64);
@@ -105,16 +106,6 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        public string BasicAuthGetUsername(string authHeader) {
-            string[] authorization = authHeader.Split(" ");
-            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
-            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
-            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
-
-            return userinfo[0];
-        }
-
-
         private string BasicAuthGetPassword(string authHeader) {
             string[] authorization = authHeader.Split(" ");
             byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
@@ -122,6 +113,89 @@ namespace projectMTCG_loeffler.Database {
             string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
 
             return userinfo[1];
+        }
+
+
+        private JArray GetCardsByUsername(string username, bool getStack) {
+            JArray cardStack = JArray.Parse("[]");
+
+            string selectStack;
+            //if flag is set to true then return stack of user; else return deck of user
+            selectStack = getStack ? "SELECT cardstack FROM users WHERE username = @uname" : "SELECT carddeck FROM users WHERE username = @uname";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                //return null if an error occured
+                return null;
+            }
+
+            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
+            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
+            selectStackCommand.Prepare();
+            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
+            if (queryreader.Read()) {   //there should only be one result
+                if (!DBNull.Value.Equals(queryreader[0])) {
+                    cardStack = JArray.Parse(queryreader[0].ToString());
+                }
+                conn.Close();
+                return cardStack;
+            }
+            else {
+                conn.Close();
+                return null;
+            }
+        }
+
+
+        private JArray GetCardsById(int userId, bool getStack) {
+            JArray cardStack = JArray.Parse("[]");
+
+            string selectStack;
+            //if flag is set to true then return stack of user; else return deck of user
+            selectStack = getStack ? "SELECT cardstack FROM users WHERE id = @uid" : "SELECT carddeck FROM users WHERE id = @uid";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                //return null if an error occured
+                return null;
+            }
+
+            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
+            selectStackCommand.Parameters.AddWithValue("uid", NpgsqlDbType.Integer, userId);
+            selectStackCommand.Prepare();
+            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
+            if (queryreader.Read()) {   //there should only be one result
+                if (!DBNull.Value.Equals(queryreader[0])) {
+                    cardStack = JArray.Parse(queryreader[0].ToString());
+                }
+                conn.Close();
+                return cardStack;
+            }
+            else {
+                conn.Close();
+                return null;
+            }
+        }
+
+        #endregion
+
+        #region public methods
+
+        public string BasicAuthGetUsername(string authHeader) {
+            string[] authorization = authHeader.Split(" ");
+            byte[] userinfoencoded = Convert.FromBase64String(authorization[1]);
+            string userinfodecoded = Encoding.UTF8.GetString(userinfoencoded);
+            string[] userinfo = userinfodecoded.Split(":"); //userinfo[0] is username; userinfo[1] is password
+
+            return userinfo[0];
         }
 
 
@@ -256,74 +330,29 @@ namespace projectMTCG_loeffler.Database {
         }
 
 
-        private JArray GetCardsByUsername(string username, bool getStack) {
-            JArray cardStack = JArray.Parse("[]");
-
-            string selectStack;
-            //if flag is set to true then return stack of user; else return deck of user
-            selectStack = getStack ? "SELECT cardstack FROM users WHERE username = @uname" : "SELECT carddeck FROM users WHERE username = @uname";
-
+        public string GiveCoins(string playerName, int coinAmount) {
+            string updateCoins = $"UPDATE users SET coins = coins + {coinAmount} WHERE username = @uname";
             NpgsqlConnection conn = new NpgsqlConnection(_connString);
             try {
                 conn.Open();
             }
             catch (Exception e) {
                 Console.WriteLine($"Error {e.Message}");
-                //return null if an error occured
-                return null;
+                return "Error. Coins could not be updated";
             }
 
-            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
-            selectStackCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, username);
-            selectStackCommand.Prepare();
-            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
-            if (queryreader.Read()) {   //there should only be one result
-                if (!DBNull.Value.Equals(queryreader[0])) {
-                    cardStack = JArray.Parse(queryreader[0].ToString());
-                }
-                conn.Close();
-                return cardStack;
+            NpgsqlCommand updateCommand = new NpgsqlCommand(updateCoins, conn);
+            updateCommand.Parameters.AddWithValue("uname", NpgsqlDbType.Varchar, 20, playerName);
+
+            if (updateCommand.ExecuteNonQuery() == 1) {
+                return $"{playerName} received {coinAmount} coins";
             }
             else {
-                conn.Close();
-                return null;
+                return "Error. Coins could not be updated";
             }
         }
 
-
-        private JArray GetCardsById(int userId, bool getStack) {
-            JArray cardStack = JArray.Parse("[]");
-
-            string selectStack;
-            //if flag is set to true then return stack of user; else return deck of user
-            selectStack = getStack ? "SELECT cardstack FROM users WHERE id = @uid" : "SELECT carddeck FROM users WHERE id = @uid";
-
-            NpgsqlConnection conn = new NpgsqlConnection(_connString);
-            try {
-                conn.Open();
-            }
-            catch (Exception e) {
-                Console.WriteLine($"Error {e.Message}");
-                //return null if an error occured
-                return null;
-            }
-
-            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectStack, conn);
-            selectStackCommand.Parameters.AddWithValue("uid", NpgsqlDbType.Integer, userId);
-            selectStackCommand.Prepare();
-            NpgsqlDataReader queryreader = selectStackCommand.ExecuteReader();
-            if (queryreader.Read()) {   //there should only be one result
-                if (!DBNull.Value.Equals(queryreader[0])) {
-                    cardStack = JArray.Parse(queryreader[0].ToString());
-                }
-                conn.Close();
-                return cardStack;
-            }
-            else {
-                conn.Close();
-                return null;
-            }
-        }
+        #endregion
 
 
         #region GET Requests
@@ -347,7 +376,7 @@ namespace projectMTCG_loeffler.Database {
             }
             catch (Exception e) {
                 Console.WriteLine($"Error {e.Message}");
-                //return null if an error occured
+                //return null if an error occurred
                 return null;
             }
 
@@ -520,7 +549,7 @@ namespace projectMTCG_loeffler.Database {
             }
             while (queryreader.Read()) {
                 tmpCard = JObject.Parse(queryreader[1].ToString());
-                tmpData = JObject.Parse($"{{Id: {queryreader[0]}, Card: {tmpCard}, TypeCondition: \"{queryreader[2]}\", MinDamageCondition: {queryreader[3]}, ElementCondition: \"{queryreader[4]}\"}}");
+                tmpData = JObject.Parse($"{{Id: {queryreader[0]}, Card: {tmpCard}, TypeCondition: \"{queryreader[2]}\", MinDamageCondition: {(DBNull.Value.Equals(queryreader[3]) ? 0 : queryreader[3])}, ElementCondition: \"{queryreader[4]}\"}}");
                 tradeData.Add(tmpData);
             }
 

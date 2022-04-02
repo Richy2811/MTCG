@@ -300,7 +300,7 @@ namespace projectMTCG_loeffler {
                             }
                             break;
 
-                        case "/transactions/packages":  //aquire a package from the market
+                        case "/transactions/packages":  //acquire a package from the market
                             status = _dbHandler.AquirePackage(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
