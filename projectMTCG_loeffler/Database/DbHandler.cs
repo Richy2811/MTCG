@@ -357,6 +357,31 @@ namespace projectMTCG_loeffler.Database {
 
         #region GET Requests
 
+        public string ShowMarket(Dictionary<string, string> headerParts) {
+            string selectPacks = "SELECT id, cardpackage, price FROM market";
+
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return "Error";
+            }
+
+            JArray dbContent = JArray.Parse("[]");
+            JObject recordTmp;
+
+            NpgsqlCommand selectStackCommand = new NpgsqlCommand(selectPacks, conn);
+            NpgsqlDataReader queryReader = selectStackCommand.ExecuteReader();
+            while (queryReader.Read()) {
+                recordTmp = JObject.Parse($"{{Id: {queryReader[0]}, \"Card Package\": {queryReader[1]}, Price: {queryReader[2]}}}");
+                dbContent.Add(recordTmp);
+            }
+
+            return dbContent.ToString();
+        }
+
         public JArray GetCards(Dictionary<string, string> headerParts, bool getStack) {
             string username = BasicAuthGetUsername(headerParts["Authorization"]);
             return GetCardsByUsername(username, getStack);

@@ -52,6 +52,27 @@ namespace projectMTCG_loeffler {
 
                 case "GET":
                     switch (Path) {
+                        case "/market":
+                            status = _dbHandler.CheckToken(Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = _dbHandler.ShowMarket(Headerparts);
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Forbidden";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error";
+                                    break;
+                            }
+                            break;
+
                         case "/stack":                  //show all cards currently in the stack
                             status = _dbHandler.CheckToken(Headerparts);
                             switch (status) {
