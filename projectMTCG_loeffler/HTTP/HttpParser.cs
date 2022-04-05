@@ -43,7 +43,7 @@ namespace projectMTCG_loeffler {
         private void Respond(StreamWriter writer) {
             //write a response based on the request
             HttpStatusCode status = HttpStatusCode.NotFound;  //placeholder for actual status response
-            string content = $"<html><body><h1>Error {(int)status}</h1>Page not found</body></html>";
+            string content = $"Error {(int)status}. Could not find response to request";
             switch (Method) {
                 //depending on the method and returned status (201 for successful registration, 409 for already existing username, etc.) set status and response accordingly
                 //combinations of methods, path, and response codes that are not used result in a "page not found" response
@@ -52,7 +52,7 @@ namespace projectMTCG_loeffler {
 
                 case "GET":
                     switch (Path) {
-                        case "/market":
+                        case "/market":                 //show all packages in the market (including their id and price)
                             status = _dbHandler.CheckToken(Headerparts);
                             switch (status) {
                                 case HttpStatusCode.OK:
@@ -282,7 +282,7 @@ namespace projectMTCG_loeffler {
                             }
                             break;
 
-                        case "/packages":               //admin can add and regular user can acquire packages (request requires admin token)
+                        case "/packages":               //add package (can only be done by admin)
                             /*
                                 Possible responses:
 
@@ -300,7 +300,7 @@ namespace projectMTCG_loeffler {
                             status = _dbHandler.AddPackage(RequestContent, Headerparts);
                             switch (status) {
                                 case HttpStatusCode.Created:
-                                    content = "Insert successful. Card package was added successfully";
+                                    content = "Insert successful. Card package successfully added";
                                     break;
 
                                 case HttpStatusCode.Unauthorized:
@@ -401,7 +401,7 @@ namespace projectMTCG_loeffler {
                                     break;
 
                                 case HttpStatusCode.BadRequest:
-                                    content = "Could not carry out task. Acquired card must be in the stack in order to trade";
+                                    content = "Could not carry out task. Acquired card must be in the stack in order to trade it";
                                     break;
 
                                 case HttpStatusCode.InternalServerError:
@@ -509,7 +509,36 @@ namespace projectMTCG_loeffler {
 
                 case "DELETE":
                     switch (Path) {
-                        case "/users":                  //delete user request (can only be done by admin through the admin token)
+                        case "/packages":               //delete package (can only be done by admin)
+                            status = _dbHandler.DeletePackage(RequestContent, Headerparts);
+                            switch (status) {
+                                case HttpStatusCode.OK:
+                                    content = "Deletion successful. Package successfully deleted";
+                                    break;
+
+                                case HttpStatusCode.Unauthorized:
+                                    content = "Unauthorized. Authorization is required in order to carry out this request";
+                                    break;
+
+                                case HttpStatusCode.Forbidden:
+                                    content = "Insufficient rights to carry out this request";
+                                    break;
+
+                                case HttpStatusCode.UnprocessableEntity:
+                                    content = "Missing content. Request is missing content or received wrong content type";
+                                    break;
+
+                                case HttpStatusCode.NotFound:
+                                    content = "Error. Package could not be found. Deletion of package failed";
+                                    break;
+
+                                case HttpStatusCode.InternalServerError:
+                                    content = "Error. An internal server error occurred when attempting to carry out the request";
+                                    break;
+                            }
+                            break;
+
+                        case "/users":                  //delete user (can only be done by admin)
                             /*
                                 Possible responses:
                             

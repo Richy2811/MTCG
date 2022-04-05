@@ -680,13 +680,19 @@ namespace projectMTCG_loeffler.Database {
                 return HttpStatusCode.Unauthorized;
             }
 
-            JArray jsonArray;
+            string packageArrayString;
+            int packagePrice;
 
             //check if header contains json content
             if (headerParts.ContainsKey("Content-Type")) {
                 if (headerParts["Content-Type"] == "application/json") {
                     //parse jsonstring
-                    jsonArray = JArray.Parse(packageJsonString);
+                    JObject packageInfo = JObject.Parse(packageJsonString);
+                    packageArrayString = packageInfo["Package"].ToString();
+                    packagePrice = (int)packageInfo["Price"];
+                    if (packagePrice < 0) {
+                        packagePrice = 0;
+                    }
                 }
                 else {
                     Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
@@ -707,9 +713,10 @@ namespace projectMTCG_loeffler.Database {
                 return HttpStatusCode.InternalServerError;
             }
 
-            string insertUser = "INSERT INTO market (cardpackage, price) VALUES (@package, 5)";
+            string insertUser = "INSERT INTO market (cardpackage, price) VALUES (@package, @price)";
             NpgsqlCommand command = new NpgsqlCommand(insertUser, conn);
-            command.Parameters.AddWithValue("package", NpgsqlDbType.Jsonb, jsonArray.ToString());
+            command.Parameters.AddWithValue("package", NpgsqlDbType.Jsonb, packageArrayString);
+            command.Parameters.AddWithValue("price", NpgsqlDbType.Integer, packagePrice);
             command.Prepare();
 
             try {
@@ -1303,6 +1310,65 @@ namespace projectMTCG_loeffler.Database {
         #endregion
 
         #region DELETE requests
+
+        public HttpStatusCode DeletePackage(string packageIdJsonString, Dictionary<string, string> headerParts) {
+            //check admin token
+            if (CheckToken(headerParts) != HttpStatusCode.OK) {
+                return CheckToken(headerParts);
+            }
+
+            string username = BasicAuthGetUsername(headerParts["Authorization"]);
+            if (username != "Administrator") {
+                return HttpStatusCode.Unauthorized;
+            }
+
+            JObject idJObject;
+            int packageId;
+
+            //check if header contains json content
+            if (headerParts.ContainsKey("Content-Type")) {
+                if (headerParts["Content-Type"] == "application/json") {
+                    //parse jsonstring
+                    idJObject = JObject.Parse(packageIdJsonString);
+                    //return error if json string does not contain the id key
+                    if (!idJObject.ContainsKey("Id")) {
+                        return HttpStatusCode.UnprocessableEntity;
+                    }
+                    packageId = (int)idJObject["Id"];
+                }
+                else {
+                    Console.Error.WriteLine("Unexpected content type in header. Expected <application/json>");
+                    return HttpStatusCode.UnprocessableEntity;
+                }
+            }
+            else {
+                Console.Error.WriteLine("Missing content in DELETE request /packages");
+                return HttpStatusCode.UnprocessableEntity;
+            }
+
+            string deletePackage = "DELETE FROM market WHERE id = @packid";
+            NpgsqlConnection conn = new NpgsqlConnection(_connString);
+            try {
+                conn.Open();
+            }
+            catch (Exception e) {
+                Console.WriteLine($"Error {e.Message}");
+                return HttpStatusCode.InternalServerError;
+            }
+            NpgsqlCommand deleteCommand = new NpgsqlCommand(deletePackage, conn);
+            deleteCommand.Parameters.AddWithValue("packid", NpgsqlDbType.Integer, packageId);
+            deleteCommand.Prepare();
+
+            if (deleteCommand.ExecuteNonQuery() == 1) {
+                conn.Close();
+                return HttpStatusCode.OK;
+            }
+            else {
+                conn.Close();
+                return HttpStatusCode.NotFound;
+            }
+        }
+
 
         public HttpStatusCode DeleteUser(string userJsonString, Dictionary<string, string> headerParts) {
             //check admin token
