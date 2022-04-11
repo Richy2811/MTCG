@@ -384,7 +384,7 @@ namespace projectMTCG_loeffler {
                         case "/tradings":               //offer a trading deal
                             status = _dbHandler.CreateTrade(RequestContent, Headerparts);
                             switch (status) {
-                                case HttpStatusCode.OK:
+                                case HttpStatusCode.Created:
                                     content = "Trading deal successfully created";
                                     break;
                                 

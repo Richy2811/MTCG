@@ -1002,7 +1002,7 @@ namespace projectMTCG_loeffler.Database {
             if (insertCommand.ExecuteNonQuery() != 1) {
                 return HttpStatusCode.InternalServerError;
             }
-            return HttpStatusCode.OK;
+            return HttpStatusCode.Created;
         }
 
 
